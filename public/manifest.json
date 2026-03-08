@@ -1,0 +1,16 @@
+{
+  "name": "지실장 — 정부지원사업, 함께해요",
+  "short_name": "지실장",
+  "description": "정부지원 사업엔, 함께가요 지실장! 소상공인을 위한 AI 정부지원사업 매칭 서비스",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#0f2847",
+  "theme_color": "#2563eb",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "any",
+      "type": "image/x-icon"
+    }
+  ]
+}

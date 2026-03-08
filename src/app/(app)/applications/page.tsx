@@ -1,0 +1,715 @@
+'use client';
+
+import { useState, useEffect, useCallback } from 'react';
+import {
+  Plus, ChevronRight, ChevronLeft, Pencil, Trash2,
+  Calendar, Building2, X, CheckCircle2, XCircle,
+  ClipboardList, Banknote, StickyNote, Trophy,
+} from 'lucide-react';
+import { supabase } from '@/lib/supabase';
+import type { UserApplication, ApplicationStatus } from '@/types/database';
+
+// ─── 상수 ─────────────────────────────────────────────────────────────────────
+
+const STATUS_ORDER: ApplicationStatus[] = [
+  'preparing', 'submitted', 'reviewing', 'approved',
+];
+
+const STATUS_CONFIG: Record<ApplicationStatus, {
+  label: string; emoji: string; borderTop: string;
+  colBg: string; cardBg: string; badge: string;
+}> = {
+  preparing: {
+    label: '준비중',  emoji: '📋',
+    borderTop: 'border-t-4 border-gray-400',
+    colBg: 'bg-gray-50 dark:bg-slate-700/30',
+    cardBg: 'bg-white dark:bg-slate-800',
+    badge: 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300',
+  },
+  submitted: {
+    label: '제출완료', emoji: '📤',
+    borderTop: 'border-t-4 border-blue-400',
+    colBg: 'bg-blue-50 dark:bg-blue-900/20',
+    cardBg: 'bg-white dark:bg-slate-800',
+    badge: 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300',
+  },
+  reviewing: {
+    label: '심사중',  emoji: '🔍',
+    borderTop: 'border-t-4 border-amber-400',
+    colBg: 'bg-amber-50 dark:bg-amber-900/20',
+    cardBg: 'bg-white dark:bg-slate-800',
+    badge: 'bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300',
+  },
+  approved: {
+    label: '합격',    emoji: '✅',
+    borderTop: 'border-t-4 border-emerald-500',
+    colBg: 'bg-emerald-50 dark:bg-emerald-900/20',
+    cardBg: 'bg-emerald-50/60 dark:bg-emerald-900/10',
+    badge: 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300',
+  },
+  rejected: {
+    label: '불합격',  emoji: '❌',
+    borderTop: 'border-t-4 border-red-400',
+    colBg: 'bg-red-50 dark:bg-red-900/20',
+    cardBg: 'bg-red-50/60 dark:bg-red-900/10',
+    badge: 'bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300',
+  },
+};
+
+// 4개 컬럼 (결과 = approved + rejected)
+const COLUMNS = [
+  { id: 'preparing', statuses: ['preparing'] as ApplicationStatus[] },
+  { id: 'submitted', statuses: ['submitted'] as ApplicationStatus[] },
+  { id: 'reviewing', statuses: ['reviewing'] as ApplicationStatus[] },
+  { id: 'result',    statuses: ['approved', 'rejected'] as ApplicationStatus[], label: '결과', emoji: '🏆' },
+] as const;
+
+// ─── 유틸 ─────────────────────────────────────────────────────────────────────
+
+function formatAmount(manwon: number | null): string {
+  if (!manwon) return '';
+  if (manwon >= 10000) return `${(manwon / 10000).toFixed(manwon % 10000 === 0 ? 0 : 1)}억원`;
+  if (manwon >= 1000) return `${(manwon / 1000).toFixed(manwon % 1000 === 0 ? 0 : 1)}천만원`;
+  return `${manwon.toLocaleString()}만원`;
+}
+
+function dday(deadline: string | null): { label: string; color: string } | null {
+  if (!deadline) return null;
+  const diff = Math.ceil((new Date(deadline).getTime() - Date.now()) / 86400000);
+  if (diff < 0)  return { label: '마감', color: 'text-gray-400' };
+  if (diff === 0) return { label: 'D-Day', color: 'text-red-600 dark:text-red-400 font-bold' };
+  if (diff <= 7)  return { label: `D-${diff}`, color: 'text-red-600 dark:text-red-400 font-semibold' };
+  if (diff <= 30) return { label: `D-${diff}`, color: 'text-amber-600 dark:text-amber-400' };
+  return { label: `D-${diff}`, color: 'text-gray-500 dark:text-gray-400' };
+}
+
+// ─── 모달 ─────────────────────────────────────────────────────────────────────
+
+interface FormState {
+  program_title: string;
+  managing_org: string;
+  application_deadline: string;
+  applied_amount: string;
+  notes: string;
+}
+
+const EMPTY_FORM: FormState = {
+  program_title: '', managing_org: '', application_deadline: '',
+  applied_amount: '', notes: '',
+};
+
+function AppModal({
+  initial, onClose, onSave, title,
+}: {
+  initial?: Partial<FormState>;
+  onClose: () => void;
+  onSave: (data: FormState) => Promise<void>;
+  title: string;
+}) {
+  const [form, setForm] = useState<FormState>({ ...EMPTY_FORM, ...initial });
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+
+  const set = (k: keyof FormState) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+    setForm(f => ({ ...f, [k]: e.target.value }));
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.program_title.trim()) { setErr('사업명은 필수입니다'); return; }
+    setSaving(true);
+    try { await onSave(form); onClose(); }
+    catch { setErr('저장 중 오류가 발생했어요. 다시 시도해 주세요.'); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md">
+        {/* 헤더 */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-slate-700">
+          <h2 className="font-semibold text-gray-900 dark:text-white">{title}</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1">
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* 폼 */}
+        <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
+          {/* 사업명 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              사업명 <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text" value={form.program_title} onChange={set('program_title')}
+              placeholder="예: 스마트공장 기초 구축 지원사업"
+              className="w-full px-3 py-2 border border-gray-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            />
+          </div>
+
+          {/* 주관기관 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">주관기관</label>
+            <input
+              type="text" value={form.managing_org} onChange={set('managing_org')}
+              placeholder="예: 중소벤처기업부"
+              className="w-full px-3 py-2 border border-gray-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            />
+          </div>
+
+          {/* 마감일 + 신청금액 (2열) */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">신청 마감일</label>
+              <input
+                type="date" value={form.application_deadline} onChange={set('application_deadline')}
+                className="w-full px-3 py-2 border border-gray-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">예상 지원금 (만원)</label>
+              <input
+                type="number" value={form.applied_amount} onChange={set('applied_amount')}
+                placeholder="예: 5000"
+                className="w-full px-3 py-2 border border-gray-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+              />
+              {form.applied_amount && (
+                <p className="text-xs text-indigo-500 mt-1">
+                  = {formatAmount(Number(form.applied_amount))}
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* 메모 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">메모</label>
+            <textarea
+              value={form.notes} onChange={set('notes')}
+              placeholder="신청 관련 메모, 준비 사항, 담당자 연락처 등"
+              rows={3}
+              className="w-full px-3 py-2 border border-gray-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none"
+            />
+          </div>
+
+          {err && <p className="text-sm text-red-500">{err}</p>}
+
+          {/* 버튼 */}
+          <div className="flex gap-3 pt-1">
+            <button type="button" onClick={onClose}
+              className="flex-1 px-4 py-2.5 border border-gray-200 dark:border-slate-600 rounded-xl text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors">
+              취소
+            </button>
+            <button type="submit" disabled={saving}
+              className="flex-1 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white rounded-xl text-sm font-medium transition-colors">
+              {saving ? '저장 중...' : '저장'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ─── 결과 입력 모달 (심사중 → 합격/불합격) ────────────────────────────────────
+
+function ResultModal({
+  app, onClose, onSave,
+}: {
+  app: UserApplication;
+  onClose: () => void;
+  onSave: (status: 'approved' | 'rejected', resultAmount?: number, notes?: string) => Promise<void>;
+}) {
+  const [picked, setPicked] = useState<'approved' | 'rejected' | null>(null);
+  const [resultAmount, setResultAmount] = useState('');
+  const [notes, setNotes] = useState(app.notes ?? '');
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    if (!picked) return;
+    setSaving(true);
+    try {
+      await onSave(picked, resultAmount ? Number(resultAmount) : undefined, notes || undefined);
+      onClose();
+    } catch {
+      /* ignore */
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-sm">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-slate-700">
+          <h2 className="font-semibold text-gray-900 dark:text-white">결과 입력</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1"><X size={18} /></button>
+        </div>
+
+        <div className="px-6 py-5 space-y-4">
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            <span className="font-medium text-gray-900 dark:text-white">{app.program_title}</span> 결과를 선택하세요
+          </p>
+
+          {/* 합격 / 불합격 선택 */}
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              onClick={() => setPicked('approved')}
+              className={`py-4 rounded-xl border-2 flex flex-col items-center gap-1 transition-all ${
+                picked === 'approved'
+                  ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/30'
+                  : 'border-gray-200 dark:border-slate-600 hover:border-emerald-300'
+              }`}
+            >
+              <CheckCircle2 size={28} className={picked === 'approved' ? 'text-emerald-500' : 'text-gray-300 dark:text-gray-600'} />
+              <span className={`text-sm font-semibold ${picked === 'approved' ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-400'}`}>
+                합격 🎉
+              </span>
+            </button>
+            <button
+              onClick={() => setPicked('rejected')}
+              className={`py-4 rounded-xl border-2 flex flex-col items-center gap-1 transition-all ${
+                picked === 'rejected'
+                  ? 'border-red-400 bg-red-50 dark:bg-red-900/30'
+                  : 'border-gray-200 dark:border-slate-600 hover:border-red-300'
+              }`}
+            >
+              <XCircle size={28} className={picked === 'rejected' ? 'text-red-500' : 'text-gray-300 dark:text-gray-600'} />
+              <span className={`text-sm font-semibold ${picked === 'rejected' ? 'text-red-600 dark:text-red-400' : 'text-gray-400'}`}>
+                불합격
+              </span>
+            </button>
+          </div>
+
+          {/* 합격 시: 확정 지원금 */}
+          {picked === 'approved' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">확정 지원금 (만원)</label>
+              <input
+                type="number" value={resultAmount}
+                onChange={e => setResultAmount(e.target.value)}
+                placeholder={app.applied_amount?.toString() ?? ''}
+                className="w-full px-3 py-2 border border-gray-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+              />
+              {resultAmount && (
+                <p className="text-xs text-emerald-600 mt-1">= {formatAmount(Number(resultAmount))}</p>
+              )}
+            </div>
+          )}
+
+          {/* 메모 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">메모 (선택)</label>
+            <textarea
+              value={notes} onChange={e => setNotes(e.target.value)}
+              placeholder="결과 관련 메모 (심사 피드백, 다음 준비 사항 등)"
+              rows={2}
+              className="w-full px-3 py-2 border border-gray-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none"
+            />
+          </div>
+
+          <div className="flex gap-3 pt-1">
+            <button type="button" onClick={onClose}
+              className="flex-1 px-4 py-2.5 border border-gray-200 dark:border-slate-600 rounded-xl text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors">
+              취소
+            </button>
+            <button
+              type="button" onClick={handleSave}
+              disabled={!picked || saving}
+              className="flex-1 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl text-sm font-medium transition-colors"
+            >
+              {saving ? '저장 중...' : '결과 저장'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── 애플리케이션 카드 ────────────────────────────────────────────────────────
+
+function AppCard({
+  app,
+  onMoveBack,
+  onMoveForward,
+  onEdit,
+  onDelete,
+  onResult,
+}: {
+  app: UserApplication;
+  onMoveBack?: () => void;
+  onMoveForward?: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+  onResult?: () => void;
+}) {
+  const cfg = STATUS_CONFIG[app.status];
+  const dd = dday(app.application_deadline);
+
+  return (
+    <div className={`rounded-xl border border-gray-200 dark:border-slate-700 p-4 space-y-3 ${cfg.cardBg}`}>
+      {/* 사업명 + 상태 배지 */}
+      <div className="flex items-start justify-between gap-2">
+        <p className="font-semibold text-gray-900 dark:text-white text-sm leading-snug flex-1">
+          {app.program_title}
+        </p>
+        <span className={`shrink-0 text-xs px-2 py-0.5 rounded-full font-medium ${cfg.badge}`}>
+          {cfg.emoji} {cfg.label}
+        </span>
+      </div>
+
+      {/* 메타 정보 */}
+      <div className="space-y-1.5">
+        {app.managing_org && (
+          <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+            <Building2 size={11} />
+            {app.managing_org}
+          </div>
+        )}
+        {app.application_deadline && (
+          <div className={`flex items-center gap-1.5 text-xs ${dd?.color ?? 'text-gray-500'}`}>
+            <Calendar size={11} />
+            {app.application_deadline}
+            {dd && <span className="font-medium">({dd.label})</span>}
+          </div>
+        )}
+        {app.applied_amount && (
+          <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+            <Banknote size={11} />
+            {app.status === 'approved' && app.result_amount
+              ? <span className="text-emerald-600 dark:text-emerald-400 font-medium">확정 {formatAmount(app.result_amount)}</span>
+              : <span>예상 {formatAmount(app.applied_amount)}</span>
+            }
+          </div>
+        )}
+        {app.notes && (
+          <div className="flex items-start gap-1.5 text-xs text-gray-400 dark:text-gray-500">
+            <StickyNote size={11} className="mt-0.5 shrink-0" />
+            <span className="line-clamp-2">{app.notes}</span>
+          </div>
+        )}
+      </div>
+
+      {/* 액션 버튼 */}
+      <div className="flex items-center gap-1 pt-1 border-t border-gray-100 dark:border-slate-700">
+        {/* 이전으로 */}
+        {onMoveBack && (
+          <button onClick={onMoveBack} title="이전 단계로"
+            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors">
+            <ChevronLeft size={15} />
+          </button>
+        )}
+
+        {/* 결과 입력 (심사중 → 결과) */}
+        {onResult && (
+          <button onClick={onResult}
+            className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors">
+            <Trophy size={12} />
+            결과 입력
+          </button>
+        )}
+
+        {/* 다음으로 (결과 입력이 없는 경우만) */}
+        {onMoveForward && !onResult && (
+          <button onClick={onMoveForward} title="다음 단계로"
+            className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors">
+            <ChevronRight size={15} />
+          </button>
+        )}
+
+        <div className="flex-1" />
+
+        {/* 편집 */}
+        <button onClick={onEdit} title="편집"
+          className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors">
+          <Pencil size={14} />
+        </button>
+        {/* 삭제 */}
+        <button onClick={onDelete} title="삭제"
+          className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
+          <Trash2 size={14} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── 메인 페이지 ──────────────────────────────────────────────────────────────
+
+export default function ApplicationsPage() {
+  const [apps, setApps] = useState<UserApplication[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // 모달 상태
+  const [addOpen, setAddOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<UserApplication | null>(null);
+  const [resultTarget, setResultTarget] = useState<UserApplication | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+
+  // ─── 데이터 로드 ─────────────────────────────────────────────────────────────
+  const loadApps = useCallback(async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const { data } = await supabase
+      .from('user_applications')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false });
+    setApps((data as UserApplication[]) ?? []);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { loadApps(); }, [loadApps]);
+
+  // ─── CRUD ────────────────────────────────────────────────────────────────────
+  const handleAdd = async (form: FormState) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('no user');
+    await supabase.from('user_applications').insert({
+      user_id: user.id,
+      program_title: form.program_title.trim(),
+      managing_org: form.managing_org.trim() || null,
+      application_deadline: form.application_deadline || null,
+      applied_amount: form.applied_amount ? Number(form.applied_amount) : null,
+      notes: form.notes.trim() || null,
+      status: 'preparing',
+    });
+    await loadApps();
+  };
+
+  const handleEdit = async (form: FormState) => {
+    if (!editTarget) return;
+    await supabase.from('user_applications').update({
+      program_title: form.program_title.trim(),
+      managing_org: form.managing_org.trim() || null,
+      application_deadline: form.application_deadline || null,
+      applied_amount: form.applied_amount ? Number(form.applied_amount) : null,
+      notes: form.notes.trim() || null,
+    }).eq('id', editTarget.id);
+    await loadApps();
+  };
+
+  const handleDelete = async (id: string) => {
+    await supabase.from('user_applications').delete().eq('id', id);
+    setDeleteTarget(null);
+    await loadApps();
+  };
+
+  const handleMove = async (app: UserApplication, newStatus: ApplicationStatus) => {
+    await supabase.from('user_applications').update({ status: newStatus }).eq('id', app.id);
+    await loadApps();
+  };
+
+  const handleResult = async (
+    status: 'approved' | 'rejected',
+    resultAmount?: number,
+    notes?: string,
+  ) => {
+    if (!resultTarget) return;
+    await supabase.from('user_applications').update({
+      status,
+      result_at: new Date().toISOString(),
+      result_amount: resultAmount ?? null,
+      notes: notes ?? resultTarget.notes,
+    }).eq('id', resultTarget.id);
+    await loadApps();
+  };
+
+  // ─── 통계 ────────────────────────────────────────────────────────────────────
+  const stats = {
+    total:    apps.length,
+    active:   apps.filter(a => !['approved','rejected'].includes(a.status)).length,
+    approved: apps.filter(a => a.status === 'approved').length,
+    totalWon: apps
+      .filter(a => a.status === 'approved' && a.result_amount)
+      .reduce((s, a) => s + (a.result_amount ?? 0), 0),
+  };
+
+  // ─── 컬럼별 앱 목록 ──────────────────────────────────────────────────────────
+  const appsInCol = (statuses: readonly ApplicationStatus[]) =>
+    apps.filter(a => (statuses as ApplicationStatus[]).includes(a.status));
+
+  const prevStatus = (s: ApplicationStatus): ApplicationStatus | undefined =>
+    ({ submitted: 'preparing', reviewing: 'submitted', approved: 'reviewing', rejected: 'reviewing' } as Record<ApplicationStatus, ApplicationStatus>)[s];
+
+  const nextStatus = (s: ApplicationStatus): ApplicationStatus | undefined =>
+    ({ preparing: 'submitted', submitted: 'reviewing' } as Partial<Record<ApplicationStatus, ApplicationStatus>>)[s];
+
+  // ─── 렌더 ────────────────────────────────────────────────────────────────────
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-full flex flex-col">
+      {/* 헤더 */}
+      <div className="px-4 sm:px-6 py-5 border-b border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h1 className="text-xl font-bold text-gray-900 dark:text-white">지원 관리</h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">신청한 지원사업을 단계별로 관리해요</p>
+          </div>
+          <button
+            onClick={() => setAddOpen(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-medium transition-colors shadow-sm"
+          >
+            <Plus size={16} />
+            지원 추가
+          </button>
+        </div>
+
+        {/* 통계 */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[
+            { label: '전체 지원', value: stats.total, color: 'text-gray-700 dark:text-gray-300' },
+            { label: '진행 중', value: stats.active, color: 'text-indigo-600 dark:text-indigo-400' },
+            { label: '합격', value: stats.approved, color: 'text-emerald-600 dark:text-emerald-400' },
+            { label: '확정 금액', value: stats.totalWon ? formatAmount(stats.totalWon) : '-', color: 'text-emerald-600 dark:text-emerald-400' },
+          ].map(({ label, value, color }) => (
+            <div key={label} className="bg-gray-50 dark:bg-slate-800 rounded-xl px-4 py-3">
+              <p className="text-xs text-gray-400 dark:text-gray-500 mb-0.5">{label}</p>
+              <p className={`text-lg font-bold ${color}`}>{value}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* 칸반 보드 */}
+      {apps.length === 0 ? (
+        /* 빈 상태 */
+        <div className="flex-1 flex flex-col items-center justify-center py-20 text-center px-4">
+          <div className="w-16 h-16 rounded-2xl bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center mx-auto mb-4">
+            <ClipboardList size={28} className="text-indigo-500" />
+          </div>
+          <p className="font-semibold text-gray-900 dark:text-white mb-2">아직 신청한 지원사업이 없어요</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+            관심 있는 지원사업을 추가하고 진행 상황을 관리해 보세요 📋
+          </p>
+          <button
+            onClick={() => setAddOpen(true)}
+            className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-medium transition-colors"
+          >
+            <Plus size={16} />
+            첫 지원사업 추가하기
+          </button>
+        </div>
+      ) : (
+        /* 칸반 스크롤 영역 */
+        <div className="flex-1 overflow-x-auto">
+          <div className="flex gap-4 p-4 sm:p-6 min-w-max h-full">
+            {COLUMNS.map(col => {
+              const colCfg = col.id === 'result'
+                ? { label: '결과', emoji: '🏆', borderTop: 'border-t-4 border-indigo-400', colBg: 'bg-slate-50 dark:bg-slate-700/30' }
+                : STATUS_CONFIG[col.id as ApplicationStatus];
+              const colApps = appsInCol(col.statuses);
+
+              return (
+                <div key={col.id} className={`w-72 shrink-0 rounded-xl ${colCfg.colBg} ${colCfg.borderTop} flex flex-col`}>
+                  {/* 컬럼 헤더 */}
+                  <div className="flex items-center justify-between px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-base">{colCfg.emoji}</span>
+                      <span className="font-semibold text-sm text-gray-700 dark:text-gray-200">
+                        {'label' in col ? col.label : (colCfg as typeof STATUS_CONFIG[ApplicationStatus]).label}
+                      </span>
+                      <span className="text-xs bg-white/70 dark:bg-slate-800/70 px-2 py-0.5 rounded-full text-gray-500 dark:text-gray-400 font-medium">
+                        {colApps.length}
+                      </span>
+                    </div>
+                    {col.id === 'preparing' && (
+                      <button onClick={() => setAddOpen(true)}
+                        className="p-1 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-white/60 dark:hover:bg-slate-700 transition-colors">
+                        <Plus size={15} />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* 카드 목록 */}
+                  <div className="flex-1 overflow-y-auto px-3 pb-4 space-y-3">
+                    {colApps.length === 0 && (
+                      <div className="text-center py-8 text-xs text-gray-400 dark:text-gray-500">
+                        {col.id === 'preparing' ? '+ 버튼으로 추가해요' : '아직 없어요'}
+                      </div>
+                    )}
+                    {colApps.map(app => {
+                      const isReviewing = app.status === 'reviewing';
+                      const prev = prevStatus(app.status);
+                      const next = nextStatus(app.status);
+
+                      return (
+                        <AppCard
+                          key={app.id}
+                          app={app}
+                          onMoveBack={prev ? () => handleMove(app, prev) : undefined}
+                          onMoveForward={!isReviewing && next ? () => handleMove(app, next) : undefined}
+                          onResult={isReviewing ? () => setResultTarget(app) : undefined}
+                          onEdit={() => setEditTarget(app)}
+                          onDelete={() => setDeleteTarget(app.id)}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* 삭제 확인 */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+            <h3 className="font-semibold text-gray-900 dark:text-white mb-2">삭제하시겠어요?</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">이 기록을 삭제하면 복구할 수 없어요.</p>
+            <div className="flex gap-3">
+              <button onClick={() => setDeleteTarget(null)}
+                className="flex-1 px-4 py-2.5 border border-gray-200 dark:border-slate-600 rounded-xl text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors">
+                취소
+              </button>
+              <button onClick={() => handleDelete(deleteTarget)}
+                className="flex-1 px-4 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-xl text-sm font-medium transition-colors">
+                삭제
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 추가 모달 */}
+      {addOpen && (
+        <AppModal title="지원사업 추가" onClose={() => setAddOpen(false)} onSave={handleAdd} />
+      )}
+
+      {/* 편집 모달 */}
+      {editTarget && (
+        <AppModal
+          title="편집"
+          initial={{
+            program_title: editTarget.program_title,
+            managing_org: editTarget.managing_org ?? '',
+            application_deadline: editTarget.application_deadline ?? '',
+            applied_amount: editTarget.applied_amount?.toString() ?? '',
+            notes: editTarget.notes ?? '',
+          }}
+          onClose={() => setEditTarget(null)}
+          onSave={handleEdit}
+        />
+      )}
+
+      {/* 결과 입력 모달 */}
+      {resultTarget && (
+        <ResultModal
+          app={resultTarget}
+          onClose={() => setResultTarget(null)}
+          onSave={handleResult}
+        />
+      )}
+    </div>
+  );
+}
