@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
   Newspaper, Search, User, MessageSquare,
-  FileText, ClipboardList, LogOut, Sun, Moon, X, BookOpen, MapPin,
+  FileText, ClipboardList, LogOut, Sun, Moon, X, BookOpen,
 } from 'lucide-react';
 import { getSupabaseBrowser } from '@/lib/supabase-browser';
 import { useTheme } from '@/lib/theme';
@@ -12,7 +12,6 @@ import { NotificationBell } from './NotificationBell';
 
 const NAV_ITEMS = [
   { href: '/briefing',     icon: Newspaper,     label: '지실장 브리핑' },
-  { href: '/tracker',      icon: MapPin,        label: '지원 트래커' },
   { href: '/programs',     icon: Search,        label: '지원사업 검색' },
   { href: '/profile',      icon: User,          label: '사업 프로필' },
   { href: '/consultant',   icon: MessageSquare, label: 'AI 상담' },

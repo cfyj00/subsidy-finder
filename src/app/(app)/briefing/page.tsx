@@ -169,7 +169,7 @@ export default function BriefingPage() {
         <Section
           icon={<Zap size={15} className="text-amber-500" />}
           title="지금 진행 중인 지원"
-          action={{ label: '전체 트래커 보기', href: '/tracker' }}
+          action={{ label: '전체 트래커 보기', href: '/applications' }}
         >
           <div className="space-y-2">
             {active.slice(0, 4).map(app => {
@@ -276,7 +276,7 @@ export default function BriefingPage() {
       {/* ── 바텀 CTA ───────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 gap-3 mt-2">
         <Link
-          href="/tracker"
+          href="/applications"
           className="flex items-center justify-center gap-2 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-medium transition-colors"
         >
           <Calendar size={15} /> 전체 로드맵 보기

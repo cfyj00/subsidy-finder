@@ -215,7 +215,7 @@ export default function ApplyPage() {
               { preparing: '준비중', submitted: '제출완료', reviewing: '심사중', approved: '합격', rejected: '불합격' }[application.status]
             }</span>
           </div>
-          <Link href="/tracker" className="text-xs text-emerald-600 dark:text-emerald-400 hover:underline font-medium">
+          <Link href="/applications" className="text-xs text-emerald-600 dark:text-emerald-400 hover:underline font-medium">
             트래커 보기 →
           </Link>
         </div>
@@ -430,7 +430,7 @@ export default function ApplyPage() {
       {/* 하단 CTA */}
       <div className="mt-6 flex gap-3">
         <Link
-          href="/tracker"
+          href="/applications"
           className="flex-1 flex items-center justify-center gap-2 py-3 border border-indigo-300 dark:border-indigo-700 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-xl text-sm font-medium transition-colors"
         >
           📊 전체 트래커 보기
