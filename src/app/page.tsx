@@ -41,13 +41,13 @@ export default function LandingPage() {
       {/* Hero */}
       <section className="py-20 px-4 bg-gradient-to-b from-indigo-50 to-white dark:from-indigo-950/50 dark:to-slate-950">
         <div className="max-w-4xl mx-auto text-center">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 text-sm font-medium mb-6">
-            🤝 정부지원 사업엔, 함께가요 지실장!
-          </div>
-          <h1 className="text-4xl sm:text-5xl font-extrabold text-gray-900 dark:text-white leading-tight mb-6">
-            복잡한 지원사업,<br />
-            <span className="text-indigo-600">지실장이 같이 해결해요</span>
+          <h1 className="text-4xl sm:text-5xl font-extrabold text-gray-900 dark:text-white leading-tight mb-4">
+            정부지원 사업엔,<br />
+            <span className="text-indigo-600">함께가요 지실장!</span>
           </h1>
+          <p className="text-xl text-gray-500 dark:text-gray-400 font-medium mb-6">
+            복잡한 지원사업, 지실장이 같이 해결해요 🤝
+          </p>
           <p className="text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto mb-10 leading-relaxed">
             정부지원사업 전문가 없어도 괜찮아요.<br />
             AI 지실장이 내 사업에 딱 맞는 지원사업을 찾고, 신청까지 함께 도와드릴게요 😊
