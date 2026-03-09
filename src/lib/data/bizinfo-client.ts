@@ -1,8 +1,14 @@
 /**
  * Bizinfo (기업마당) Open API 클라이언트
  *
- * API 키 발급: https://www.bizinfo.go.kr → 마이페이지 → Open API 신청
- * 환경변수: BIZINFO_API_KEY (또는 DATA_GO_KR_API_KEY)
+ * API 키 발급:
+ *   1. https://www.bizinfo.go.kr 회원가입 후 로그인
+ *   2. 상단 메뉴 → 활용정보 → Open API 신청 (또는 /apiList.do)
+ *   3. IP 주소 또는 서비스 URL 입력 후 신청 → 이메일로 키 수령
+ *
+ * 환경변수: BIZINFO_API_KEY
+ * 인증 파라미터: crtfcKey (serviceKey 아님!)
+ * 기본 엔드포인트: https://www.bizinfo.go.kr/uss/rss/bizinfoApi.do
  */
 
 // ─── 응답 타입 ──────────────────────────────────────────────────────────────
@@ -40,8 +46,8 @@ const BIZINFO_BASE = 'https://www.bizinfo.go.kr/uss/rss/bizinfoApi.do';
 const PAGE_SIZE = 100;
 
 function getApiKey(): string {
-  const key = process.env.BIZINFO_API_KEY ?? process.env.DATA_GO_KR_API_KEY ?? '';
-  return key;
+  // BIZINFO_API_KEY 가 정식 명칭 (crtfcKey 파라미터로 전달)
+  return process.env.BIZINFO_API_KEY ?? '';
 }
 
 // ─── 날짜 파싱 (YYYYMMDD → ISO) ────────────────────────────────────────────
@@ -86,18 +92,22 @@ async function fetchPage(
 ): Promise<BizinfoListResponse> {
   const key = getApiKey();
   if (!key) {
-    throw new Error('BIZINFO_API_KEY 또는 DATA_GO_KR_API_KEY 환경변수가 설정되지 않았습니다.');
+    throw new Error(
+      'BIZINFO_API_KEY 환경변수가 설정되지 않았습니다.\n' +
+      '발급: https://www.bizinfo.go.kr → 활용정보 → Open API 신청',
+    );
   }
 
   const params = new URLSearchParams({
-    serviceKey: key,
-    pageUnit:   String(PAGE_SIZE),
-    pageIndex:  String(pageIndex),
-    type:       'json',
+    crtfcKey:  key,               // ← bizinfo 인증키 파라미터명
+    pageUnit:  String(PAGE_SIZE),
+    pageIndex: String(pageIndex),
+    type:      'json',
   });
 
-  if (options?.status)  params.set('pbancSttus', options.status);
-  if (options?.keyword) params.set('pbanc_nm',   options.keyword);
+  // pblancSttus: Y=접수중, O=접수예정, N=마감
+  if (options?.status)  params.set('pblancSttus', options.status);
+  if (options?.keyword) params.set('keyword',      options.keyword);
 
   const url = `${BIZINFO_BASE}?${params.toString()}`;
   const res = await fetch(url, {
@@ -109,27 +119,70 @@ async function fetchPage(
     throw new Error(`Bizinfo API HTTP ${res.status}: ${res.statusText}`);
   }
 
-  const json = await res.json();
+  const contentType = res.headers.get('content-type') ?? '';
+  let items: BizinfoListItem[] = [];
+  let totalCount = 0;
 
-  // 응답 구조 정규화 (bizinfo는 중첩 구조로 반환할 수 있음)
-  const data = json?.response ?? json;
-  const body = data?.body ?? data;
+  if (contentType.includes('xml') || contentType.includes('html')) {
+    // XML/RSS 응답 파싱 (bizinfo는 type=json 요청해도 XML로 응답하는 경우 있음)
+    const text = await res.text();
+    // 에러 메시지 확인
+    const errMatch = text.match(/<reqErr[^>]*>([\s\S]*?)<\/reqErr>/);
+    if (errMatch) throw new Error(`Bizinfo API 오류: ${errMatch[1].trim()}`);
 
-  const items: BizinfoListItem[] = Array.isArray(body?.items?.item)
-    ? body.items.item
-    : Array.isArray(body?.items)
-    ? body.items
-    : body?.item != null
-    ? [body.item]
-    : [];
+    const countMatch = text.match(/<totalCount[^>]*>([\d]+)<\/totalCount>/);
+    totalCount = countMatch ? Number(countMatch[1]) : 0;
+
+    // <item>...</item> 블록 추출
+    const itemMatches = text.matchAll(/<item>([\s\S]*?)<\/item>/g);
+    for (const match of itemMatches) {
+      const block = match[1];
+      const get = (tag: string) => {
+        const m = block.match(new RegExp(`<${tag}[^>]*><!\\[CDATA\\[([\\s\\S]*?)\\]\\]><\\/${tag}>|<${tag}[^>]*>([^<]*)<\\/${tag}>`));
+        return m ? (m[1] ?? m[2] ?? '').trim() : '';
+      };
+      items.push({
+        pblancId:       get('pblancId'),
+        pblancNm:       get('pblancNm') || get('title'),
+        jrsdInsttNm:    get('jrsdInsttNm'),
+        creatPnttm:     get('creatPnttm'),
+        pbancBgngYmd:   get('pbancBgngYmd'),
+        pbancEndYmd:    get('pbancEndYmd'),
+        pgmSttusNm:     get('pgmSttusNm'),
+        bsnsChrgDeptNm: get('bsnsChrgDeptNm') || undefined,
+        ctpvNm:         get('ctpvNm') || undefined,
+        detlUrl:        get('detlUrl') || get('link') || undefined,
+        ntcnNm:         get('ntcnNm') || undefined,
+        ctgryNm:        get('ctgryNm') || undefined,
+        bsnsSumryCn:    get('bsnsSumryCn') || get('description') || undefined,
+      });
+    }
+  } else {
+    // JSON 응답 파싱
+    const json = await res.json();
+    const data = json?.response ?? json;
+    const body = data?.body ?? data;
+    totalCount = Number(body?.totalCount ?? 0);
+
+    items = Array.isArray(body?.items?.item)
+      ? body.items.item
+      : Array.isArray(body?.items)
+      ? body.items
+      : body?.item != null
+      ? [body.item]
+      : [];
+  }
+
+  // 빈 pblancId 제거
+  const validItems = items.filter((it) => !!it.pblancId);
 
   return {
-    resultCode: data?.header?.resultCode ?? '00',
-    resultMsg:  data?.header?.resultMsg  ?? 'OK',
-    totalCount: Number(body?.totalCount ?? items.length),
+    resultCode: '00',
+    resultMsg:  'OK',
+    totalCount: totalCount || validItems.length,
     pageIndex,
     pageUnit:   PAGE_SIZE,
-    items,
+    items:      validItems,
   };
 }
 
