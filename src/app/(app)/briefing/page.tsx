@@ -8,8 +8,9 @@ import type { Program, BusinessProfile, UserApplication, UserProgramMatch } from
 import {
   ArrowRight, AlertTriangle, CheckCheck, Clock,
   Search, MessageSquare, ClipboardList, Loader2,
-  Zap, Trophy, TrendingUp, Calendar,
+  Zap, Trophy, TrendingUp, Calendar, Lightbulb, BookOpen,
 } from 'lucide-react';
+import { DAILY_TIPS } from '@/lib/constants';
 import { format, isToday, isTomorrow } from 'date-fns';
 import { ko } from 'date-fns/locale';
 
@@ -92,6 +93,10 @@ export default function BriefingPage() {
     })
     .sort((a, b) => b.score - a.score)
     .slice(0, 3);
+
+  // 오늘 팁 (날짜 기반으로 매일 다른 팁)
+  const todayTipIndex = new Date().getDate() % DAILY_TIPS.length;
+  const todayTip = DAILY_TIPS[todayTipIndex];
 
   // 오늘 날짜
   const now = new Date();
@@ -272,6 +277,19 @@ export default function BriefingPage() {
           </div>
         </Section>
       )}
+
+      {/* ── 오늘의 팁 ──────────────────────────────────────────────────────── */}
+      <div className="rounded-2xl border border-indigo-100 dark:border-indigo-800/30 bg-gradient-to-br from-indigo-50 to-blue-50 dark:from-indigo-900/20 dark:to-blue-900/20 p-4 mb-4">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2 font-semibold text-sm text-indigo-700 dark:text-indigo-300">
+            <Lightbulb size={15} className="text-amber-500" /> 오늘의 팁
+          </div>
+          <Link href="/learn" className="flex items-center gap-1 text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-medium">
+            <BookOpen size={11} /> 지원사업 배우기 <ArrowRight size={11} />
+          </Link>
+        </div>
+        <p className="text-sm text-indigo-800 dark:text-indigo-200 leading-relaxed">{todayTip}</p>
+      </div>
 
       {/* ── 바텀 CTA ───────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 gap-3 mt-2">

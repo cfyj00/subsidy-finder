@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { Menu } from 'lucide-react';
 import { Sidebar } from './Sidebar';
 
@@ -31,7 +32,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <button onClick={() => setMobileOpen(true)} className="p-1.5 rounded-lg hover:bg-white/10">
             <Menu size={20} />
           </button>
-          <span className="font-semibold text-sm">🤝 지실장</span>
+          <Link href="/briefing" className="font-semibold text-sm hover:opacity-80 transition-opacity">
+            🤝 지실장
+          </Link>
         </header>
 
         {/* Page content */}

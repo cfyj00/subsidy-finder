@@ -24,7 +24,7 @@ export default function LandingPage() {
             <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-base">🤝</div>
             <div>
               <span className="font-bold text-gray-900 dark:text-white text-base leading-tight">지실장</span>
-              <p className="text-xs text-gray-400 dark:text-gray-500 leading-tight">정부지원사업, 함께해요</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500 leading-tight">소상공인·소기업·중소기업 지원사업</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -46,10 +46,10 @@ export default function LandingPage() {
             <span className="text-indigo-600">함께가요 지실장!</span>
           </h1>
           <p className="text-xl text-gray-500 dark:text-gray-400 font-medium mb-6">
-            복잡한 지원사업, 지실장이 같이 해결해요 🤝
+            소상공인부터 중소기업까지, 지실장이 함께해요 🤝
           </p>
           <p className="text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto mb-10 leading-relaxed">
-            정부지원사업 전문가 없어도 괜찮아요.<br />
+            전문 컨설턴트 없어도 괜찮아요.<br />
             AI 지실장이 내 사업에 딱 맞는 지원사업을 찾고, 신청까지 함께 도와드릴게요 😊
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
@@ -102,7 +102,7 @@ export default function LandingPage() {
         <div className="max-w-4xl mx-auto">
           <div className="text-center mb-12">
             <h2 className="text-3xl font-bold mb-3">3단계로 완성</h2>
-            <p className="text-indigo-300">누구나 쉽게 정부지원사업을 신청할 수 있습니다.</p>
+            <p className="text-indigo-300">소상공인·소기업·중소기업 누구나 쉽게 신청할 수 있습니다.</p>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
             {[
@@ -146,7 +146,7 @@ export default function LandingPage() {
       <section className="py-20 px-4 bg-gradient-to-br from-indigo-600 to-indigo-800 text-white">
         <div className="max-w-2xl mx-auto text-center">
           <h2 className="text-3xl font-bold mb-4">지실장과 함께 시작해요 🤝</h2>
-          <p className="text-indigo-200 mb-8">회원가입 후 5분이면 내 사업에 딱 맞는 지원사업을 추천받을 수 있어요.</p>
+          <p className="text-indigo-200 mb-8">소상공인·소기업·중소기업 모두 환영해요. 회원가입 후 5분이면 딱 맞는 지원사업을 추천받을 수 있어요.</p>
           <Link
             href="/signup"
             className="inline-flex items-center gap-2 px-8 py-3.5 bg-white text-indigo-700 hover:bg-indigo-50 rounded-xl font-semibold transition-colors"
@@ -164,7 +164,7 @@ export default function LandingPage() {
             <span className="text-sm font-medium text-gray-700 dark:text-gray-400">지실장</span>
           </div>
           <p className="text-xs text-gray-400 dark:text-gray-500">
-            © 2026 지실장. 소상공인을 응원합니다 💙
+            © 2026 지실장. 소상공인·소기업·중소기업을 응원합니다 💙
           </p>
         </div>
       </footer>

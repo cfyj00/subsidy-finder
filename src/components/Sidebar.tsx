@@ -4,20 +4,21 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
   Newspaper, Search, User, MessageSquare,
-  FileText, ClipboardList, LogOut, Sun, Moon, X, BookOpen,
+  FileText, ClipboardList, LogOut, Sun, Moon, X, BookOpen, GraduationCap,
 } from 'lucide-react';
 import { getSupabaseBrowser } from '@/lib/supabase-browser';
 import { useTheme } from '@/lib/theme';
 import { NotificationBell } from './NotificationBell';
 
 const NAV_ITEMS = [
-  { href: '/briefing',     icon: Newspaper,     label: '지실장 브리핑' },
-  { href: '/programs',     icon: Search,        label: '지원사업 검색' },
-  { href: '/profile',      icon: User,          label: '사업 프로필' },
-  { href: '/consultant',   icon: MessageSquare, label: 'AI 상담' },
-  { href: '/documents',    icon: FileText,      label: '서류 가이드' },
-  { href: '/applications', icon: ClipboardList, label: '지원 관리' },
-  { href: '/glossary',     icon: BookOpen,      label: '용어사전' },
+  { href: '/briefing',     icon: Newspaper,      label: '지실장 브리핑' },
+  { href: '/programs',     icon: Search,         label: '지원사업 검색' },
+  { href: '/profile',      icon: User,           label: '사업 프로필' },
+  { href: '/consultant',   icon: MessageSquare,  label: 'AI 상담' },
+  { href: '/documents',    icon: FileText,       label: '서류 가이드' },
+  { href: '/applications', icon: ClipboardList,  label: '지원 관리' },
+  { href: '/learn',        icon: GraduationCap,  label: '지원사업 배우기' },
+  { href: '/glossary',     icon: BookOpen,       label: '용어사전' },
 ];
 
 interface SidebarProps {
@@ -41,15 +42,15 @@ export function Sidebar({ onClose, mobile }: SidebarProps) {
     <aside className="w-64 h-full flex flex-col sidebar-gradient">
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-5 border-b border-indigo-800/50">
-        <div className="flex items-center gap-3">
+        <Link href="/briefing" className="flex items-center gap-3 hover:opacity-80 transition-opacity" onClick={onClose}>
           <div className="w-8 h-8 rounded-lg bg-indigo-500 flex items-center justify-center text-base">🤝</div>
           <div>
             <p className="text-white font-bold text-sm leading-tight">지실장</p>
-            <p className="text-indigo-300 text-xs">정부지원사업, 함께해요</p>
+            <p className="text-indigo-300 text-xs">소상공인·중소기업 지원사업</p>
           </div>
-        </div>
+        </Link>
         {mobile && (
-          <button onClick={onClose} className="text-indigo-300 hover:text-white p-1">
+          <button onClick={onClose} className="text-indigo-300 hover:text-white p-1 ml-auto">
             <X size={18} />
           </button>
         )}

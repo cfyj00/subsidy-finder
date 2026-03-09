@@ -46,8 +46,11 @@
 body {
   background-color: var(--background);
   color: var(--foreground);
-  font-family: 'Pretendard', 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  font-family: var(--font-sans), 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 1.65;
   -webkit-font-smoothing: antialiased;
+  word-break: keep-all;
 }
 
 /* ── 사이드바 그라데이션 ─────────────────────────────────────────────── */
