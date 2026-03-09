@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import {
   Plus, ChevronRight, ChevronLeft, Pencil, Trash2,
-  Calendar, Building2, X, CheckCircle2, XCircle, Circle,
+  Calendar, Building2, X, Check, CheckCircle2, XCircle, Circle,
   ClipboardList, ClipboardCheck, Banknote, StickyNote, Trophy,
   FolderOpen, Send, Clock, PartyPopper, Map,
   MessageSquare, Loader2, LayoutList,
@@ -116,6 +116,185 @@ function nextAction(status: ApplicationStatus): string {
     rejected:   '탈락 사유 확인 후 재도전 사업 탐색',
   };
   return map[status] ?? '';
+}
+
+// ── 단계별 가이드 config ───────────────────────────────────────────────────
+
+const STAGE_GUIDE: Record<ApplicationStatus, {
+  title: string;
+  items: string[];
+  advanceLabel?: string;
+  advanceTo?: ApplicationStatus;
+}> = {
+  preparing: {
+    title: '서류 체크리스트',
+    items: [
+      '신청 자격 요건 확인 (업종·업력·매출)',
+      '사업계획서 작성',
+      '필수 서류 준비 (사업자등록증, 재무제표 등)',
+      '온라인 신청서 작성 및 제출',
+    ],
+    advanceLabel: '신청 완료로 기록',
+    advanceTo: 'submitted',
+  },
+  submitted: {
+    title: '제출 후 확인 목록',
+    items: [
+      '신청 접수번호 확인 (이메일·문자)',
+      '추가 서류 요청 여부 확인',
+      '결과 발표 예정일 확인',
+    ],
+    advanceLabel: '심사중으로 이동',
+    advanceTo: 'reviewing',
+  },
+  reviewing: {
+    title: '심사 진행 중',
+    items: ['담당 기관에서 서류 검토 중이에요', '결과 발표 후 아래 버튼으로 기록하세요'],
+  },
+  approved: {
+    title: '선정 후 할 일',
+    items: ['협약 체결 완료', '사업비 집행 계획 수립', '사후 관리 일정 확인'],
+  },
+  rejected: {
+    title: '다음 도전을 위해',
+    items: ['탈락 사유 확인 및 분석', '유사 지원사업 재탐색'],
+  },
+};
+
+// ── 체크리스트 훅 (localStorage) ───────────────────────────────────────────
+
+function useChecklist(appId: string, stage: ApplicationStatus) {
+  const guide = STAGE_GUIDE[stage];
+  const total = guide.items.length;
+  const key   = `checklist-${appId}-${stage}`;
+
+  const [checks, setChecks] = useState<boolean[]>(() => Array(total).fill(false));
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(key);
+      if (saved) {
+        const parsed: boolean[] = JSON.parse(saved);
+        setChecks(Array(total).fill(false).map((_, i) => parsed[i] ?? false));
+      } else {
+        setChecks(Array(total).fill(false));
+      }
+    } catch { /* ignore */ }
+  }, [key, total]);
+
+  const toggle = useCallback((i: number) => {
+    setChecks(prev => {
+      const next = [...prev];
+      next[i] = !next[i];
+      try { localStorage.setItem(key, JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+  }, [key]);
+
+  const doneCount = checks.filter(Boolean).length;
+  return { checks, toggle, doneCount, total, allDone: doneCount === total };
+}
+
+// ── StageGuide 컴포넌트 ────────────────────────────────────────────────────
+
+function StageGuide({ app, onAdvance, onResult }: {
+  app: UserApplication;
+  onAdvance: (status: ApplicationStatus) => void;
+  onResult: () => void;
+}) {
+  const guide       = STAGE_GUIDE[app.status];
+  const isCheckable = app.status === 'preparing' || app.status === 'submitted';
+  const { checks, toggle, doneCount, total, allDone } = useChecklist(app.id, app.status);
+
+  return (
+    <div className="bg-gray-50 dark:bg-slate-800/50 rounded-xl px-3 py-3 space-y-2.5">
+      {/* 헤더 */}
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+          {guide.title}
+        </p>
+        {isCheckable && (
+          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full transition-colors ${
+            allDone
+              ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400'
+              : 'bg-gray-200 dark:bg-slate-700 text-gray-400'
+          }`}>
+            {doneCount}/{total}
+          </span>
+        )}
+      </div>
+
+      {/* 진행 바 */}
+      {isCheckable && (
+        <div className="h-1.5 bg-gray-200 dark:bg-slate-700 rounded-full overflow-hidden">
+          <div
+            className="h-full bg-indigo-500 rounded-full transition-all duration-500"
+            style={{ width: `${total > 0 ? (doneCount / total) * 100 : 0}%` }}
+          />
+        </div>
+      )}
+
+      {/* 항목 */}
+      <div className="space-y-2">
+        {guide.items.map((item, i) =>
+          isCheckable ? (
+            <button
+              key={i}
+              type="button"
+              onClick={() => toggle(i)}
+              className="flex items-start gap-2.5 text-xs text-left w-full group"
+            >
+              <div className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 mt-px transition-all ${
+                checks[i]
+                  ? 'bg-indigo-500 border-indigo-500 text-white'
+                  : 'border-gray-300 dark:border-slate-600 group-hover:border-indigo-400'
+              }`}>
+                {checks[i] && <Check size={9} />}
+              </div>
+              <span className={`leading-relaxed ${
+                checks[i]
+                  ? 'line-through text-gray-300 dark:text-gray-600'
+                  : 'text-gray-600 dark:text-gray-300'
+              }`}>
+                {item}
+              </span>
+            </button>
+          ) : (
+            <div key={i} className="flex items-start gap-2 text-xs text-gray-500 dark:text-gray-400">
+              <span className="shrink-0 mt-px">
+                {app.status === 'reviewing' ? '⏳' : app.status === 'approved' ? '✅' : '•'}
+              </span>
+              <span>{item}</span>
+            </div>
+          )
+        )}
+      </div>
+
+      {/* 액션 버튼 */}
+      {app.status === 'reviewing' ? (
+        <button
+          type="button"
+          onClick={onResult}
+          className="w-full flex items-center justify-center gap-2 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold transition-colors"
+        >
+          <Trophy size={14} /> 결과 입력하기 →
+        </button>
+      ) : guide.advanceTo ? (
+        <button
+          type="button"
+          onClick={() => onAdvance(guide.advanceTo!)}
+          className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+            allDone
+              ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm'
+              : 'bg-gray-100 dark:bg-slate-700 text-gray-500 dark:text-gray-400 border border-dashed border-gray-300 dark:border-slate-600 hover:border-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-400'
+          }`}
+        >
+          {allDone ? <CheckCircle2 size={14} /> : <ChevronRight size={14} />}
+          {allDone ? `완료! ${guide.advanceLabel ?? '다음으로'} →` : `${guide.advanceLabel ?? '다음으로'} →`}
+        </button>
+      ) : null}
+    </div>
+  );
 }
 
 // ── Form state ─────────────────────────────────────────────────────────────
@@ -407,9 +586,10 @@ function AppCard({ app, onMoveBack, onMoveForward, onEdit, onDelete, onResult }:
 }
 
 // ── Roadmap View ───────────────────────────────────────────────────────────
-function RoadmapView({ apps, onAddClick, onEditApp, onDeleteApp, onResultApp }: {
+function RoadmapView({ apps, onAddClick, onMoveApp, onEditApp, onDeleteApp, onResultApp }: {
   apps: UserApplication[];
   onAddClick: () => void;
+  onMoveApp: (app: UserApplication, status: ApplicationStatus) => void;
   onEditApp: (app: UserApplication) => void;
   onDeleteApp: (id: string) => void;
   onResultApp: (app: UserApplication) => void;
@@ -527,16 +707,17 @@ function RoadmapView({ apps, onAddClick, onEditApp, onDeleteApp, onResultApp }: 
                   })}
                 </div>
 
-                {/* 다음 할 일 */}
-                <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-xl px-3 py-2.5">
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">다음 할 일</p>
-                  <p className="text-sm font-medium text-indigo-700 dark:text-indigo-300">👉 {nextAction(app.status)}</p>
-                  {app.application_deadline && (
-                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                      📅 마감 {format(new Date(app.application_deadline), 'yyyy.M.d (EEE)', { locale: ko })}
-                    </p>
-                  )}
-                </div>
+                {/* 단계별 가이드 & 체크리스트 */}
+                <StageGuide
+                  app={app}
+                  onAdvance={(status) => onMoveApp(app, status)}
+                  onResult={() => onResultApp(app)}
+                />
+                {app.application_deadline && (
+                  <p className="text-xs text-gray-400 dark:text-gray-500">
+                    📅 마감 {format(new Date(app.application_deadline), 'yyyy.M.d (EEE)', { locale: ko })}
+                  </p>
+                )}
 
                 {/* 합격 금액 */}
                 {app.status === 'approved' && app.result_amount && (
@@ -558,14 +739,7 @@ function RoadmapView({ apps, onAddClick, onEditApp, onDeleteApp, onResultApp }: 
                   </Link>
                 )}
                 <div className="flex-1" />
-                {app.status === 'reviewing' && (
-                  <button
-                    onClick={() => onResultApp(app)}
-                    className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors"
-                  >
-                    <Trophy size={12} /> 결과 입력
-                  </button>
-                )}
+                {/* 결과 입력은 StageGuide에서 처리 */}
                 <Link
                   href={`/consultant?q=${encodeURIComponent(app.program_title + ' ' + nextAction(app.status))}`}
                   className="flex items-center gap-1.5 text-xs text-gray-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
@@ -854,6 +1028,7 @@ export default function ApplicationsPage() {
           <RoadmapView
             apps={apps}
             onAddClick={() => setAddOpen(true)}
+            onMoveApp={handleMove}
             onEditApp={setEditTarget}
             onDeleteApp={setDeleteTarget}
             onResultApp={setResultTarget}
