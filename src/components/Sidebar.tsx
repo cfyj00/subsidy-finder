@@ -3,22 +3,22 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
-  LayoutDashboard, Search, User, MessageSquare,
-  FileText, ClipboardList, Bell, LogOut, Sun, Moon, X, BookOpen
+  Newspaper, Search, User, MessageSquare,
+  FileText, ClipboardList, LogOut, Sun, Moon, X, BookOpen, MapPin,
 } from 'lucide-react';
 import { getSupabaseBrowser } from '@/lib/supabase-browser';
 import { useTheme } from '@/lib/theme';
 import { NotificationBell } from './NotificationBell';
 
 const NAV_ITEMS = [
-  { href: '/dashboard', icon: LayoutDashboard, label: '대시보드' },
-  { href: '/programs', icon: Search, label: '지원사업 검색' },
-  { href: '/profile', icon: User, label: '사업 프로필' },
-  { href: '/consultant', icon: MessageSquare, label: 'AI 상담' },
-  { href: '/documents', icon: FileText, label: '서류 가이드' },
+  { href: '/briefing',     icon: Newspaper,     label: '지실장 브리핑' },
+  { href: '/tracker',      icon: MapPin,        label: '지원 트래커' },
+  { href: '/programs',     icon: Search,        label: '지원사업 검색' },
+  { href: '/profile',      icon: User,          label: '사업 프로필' },
+  { href: '/consultant',   icon: MessageSquare, label: 'AI 상담' },
+  { href: '/documents',    icon: FileText,      label: '서류 가이드' },
   { href: '/applications', icon: ClipboardList, label: '지원 관리' },
-  { href: '/glossary', icon: BookOpen, label: '용어사전' },
-  { href: '/notifications', icon: Bell, label: '알림' },
+  { href: '/glossary',     icon: BookOpen,      label: '용어사전' },
 ];
 
 interface SidebarProps {

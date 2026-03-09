@@ -10,7 +10,7 @@ import type { Program, BusinessProfile, UserProgramMatch } from '@/types/databas
 import {
   ArrowLeft, Bookmark, BookmarkCheck, ExternalLink, CheckCircle,
   XCircle, Calendar, Building2, MapPin, Users, DollarSign, Clock,
-  Loader2, PlusCircle, Tag, FileText, X, CheckCheck,
+  Loader2, PlusCircle, Tag, FileText, X, CheckCheck, PlayCircle,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
@@ -478,46 +478,52 @@ export default function ProgramDetailPage() {
         {/* ── CTA ───────────────────────────────────────────────────────────────── */}
         <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl p-5">
           <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-4 uppercase tracking-wide">다음 단계</h2>
-          <div className="flex flex-col sm:flex-row gap-3">
-            {/* Official site */}
-            {program.detail_url ? (
-              <a
-                href={program.detail_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex-1 flex items-center justify-center gap-2 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-medium text-sm transition-colors"
-              >
-                <ExternalLink size={15} /> 공식 사이트에서 신청
-              </a>
-            ) : (
-              <div className="flex-1 flex items-center justify-center gap-2 py-3 bg-gray-100 dark:bg-slate-700 text-gray-400 rounded-xl font-medium text-sm cursor-not-allowed">
-                <ExternalLink size={15} /> 신청 링크 없음
-              </div>
-            )}
-
-            {/* Add to tracker */}
-            <button
-              onClick={() => !addedToTracker && setShowAddModal(true)}
-              disabled={addedToTracker}
-              className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-medium text-sm transition-colors border ${
-                addedToTracker
-                  ? 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:border-emerald-700 dark:text-emerald-400 cursor-default'
-                  : 'border-indigo-300 dark:border-indigo-700 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20'
-              }`}
-            >
-              {addedToTracker
-                ? <><CheckCheck size={15} /> 트래커에 추가됨</>
-                : <><PlusCircle size={15} /> 지원 관리에 추가</>
-              }
-            </button>
-
-            {/* AI consult */}
+          <div className="flex flex-col gap-3">
+            {/* 지원하기 — 주 CTA */}
             <Link
-              href={`/consultant?programId=${id}&q=${encodeURIComponent(program.title + ' 지원사업 신청 전략 알려줘')}`}
-              className="flex-1 flex items-center justify-center gap-2 py-3 border border-gray-300 dark:border-slate-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-700 rounded-xl font-medium text-sm transition-colors"
+              href={`/apply/${id}`}
+              className="flex items-center justify-center gap-2 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-semibold text-sm transition-colors shadow-sm"
             >
-              🎯 이 사업 AI 상담
+              <PlayCircle size={16} /> 지원하기 — 단계별 가이드 보기
             </Link>
+
+            <div className="flex flex-col sm:flex-row gap-3">
+              {/* Add to tracker */}
+              <button
+                onClick={() => !addedToTracker && setShowAddModal(true)}
+                disabled={addedToTracker}
+                className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl font-medium text-sm transition-colors border ${
+                  addedToTracker
+                    ? 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:border-emerald-700 dark:text-emerald-400 cursor-default'
+                    : 'border-indigo-300 dark:border-indigo-700 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20'
+                }`}
+              >
+                {addedToTracker
+                  ? <><CheckCheck size={15} /> 트래커에 추가됨</>
+                  : <><PlusCircle size={15} /> 트래커에 추가</>
+                }
+              </button>
+
+              {/* AI consult */}
+              <Link
+                href={`/consultant?programId=${id}&q=${encodeURIComponent(program.title + ' 지원사업 신청 전략 알려줘')}`}
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 border border-gray-300 dark:border-slate-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-700 rounded-xl font-medium text-sm transition-colors"
+              >
+                🎯 AI 상담
+              </Link>
+
+              {/* Official site */}
+              {program.detail_url && (
+                <a
+                  href={program.detail_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 border border-gray-300 dark:border-slate-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-700 rounded-xl font-medium text-sm transition-colors"
+                >
+                  <ExternalLink size={14} /> 공식 사이트
+                </a>
+              )}
+            </div>
           </div>
         </div>
 

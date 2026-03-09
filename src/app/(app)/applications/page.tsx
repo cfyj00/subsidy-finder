@@ -6,7 +6,7 @@ import {
   Calendar, Building2, X, CheckCircle2, XCircle,
   ClipboardList, Banknote, StickyNote, Trophy,
 } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { getSupabaseBrowser } from '@/lib/supabase-browser';
 import type { UserApplication, ApplicationStatus } from '@/types/database';
 
 // ─── 상수 ─────────────────────────────────────────────────────────────────────
@@ -449,8 +449,9 @@ export default function ApplicationsPage() {
 
   // ─── 데이터 로드 ─────────────────────────────────────────────────────────────
   const loadApps = useCallback(async () => {
+    const supabase = getSupabaseBrowser();
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!user) { setLoading(false); return; }
     const { data } = await supabase
       .from('user_applications')
       .select('*')
@@ -464,6 +465,7 @@ export default function ApplicationsPage() {
 
   // ─── CRUD ────────────────────────────────────────────────────────────────────
   const handleAdd = async (form: FormState) => {
+    const supabase = getSupabaseBrowser();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('no user');
     await supabase.from('user_applications').insert({
@@ -480,6 +482,7 @@ export default function ApplicationsPage() {
 
   const handleEdit = async (form: FormState) => {
     if (!editTarget) return;
+    const supabase = getSupabaseBrowser();
     await supabase.from('user_applications').update({
       program_title: form.program_title.trim(),
       managing_org: form.managing_org.trim() || null,
@@ -491,12 +494,14 @@ export default function ApplicationsPage() {
   };
 
   const handleDelete = async (id: string) => {
+    const supabase = getSupabaseBrowser();
     await supabase.from('user_applications').delete().eq('id', id);
     setDeleteTarget(null);
     await loadApps();
   };
 
   const handleMove = async (app: UserApplication, newStatus: ApplicationStatus) => {
+    const supabase = getSupabaseBrowser();
     await supabase.from('user_applications').update({ status: newStatus }).eq('id', app.id);
     await loadApps();
   };
@@ -507,6 +512,7 @@ export default function ApplicationsPage() {
     notes?: string,
   ) => {
     if (!resultTarget) return;
+    const supabase = getSupabaseBrowser();
     await supabase.from('user_applications').update({
       status,
       result_at: new Date().toISOString(),
