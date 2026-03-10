@@ -187,10 +187,11 @@ export default function ProgramDetailPage() {
 
   const statusBadge = (s: string) => {
     const map: Record<string, { label: string; cls: string }> = {
-      open:     { label: '모집중',  cls: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' },
-      upcoming: { label: '예정',    cls: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' },
-      closed:   { label: '마감',    cls: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400' },
-      always:   { label: '상시접수', cls: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400' },
+      open:     { label: '모집중',      cls: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' },
+      upcoming: { label: '예정',        cls: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' },
+      closed:   { label: '마감',        cls: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400' },
+      always:   { label: '상시접수',    cls: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400' },
+      expected: { label: '출시예상',    cls: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400' },
     };
     const info = map[s] ?? map.always;
     return <span className={`px-3 py-1 rounded-full text-sm font-medium ${info.cls}`}>{info.label}</span>;
@@ -290,6 +291,27 @@ export default function ProgramDetailPage() {
           </div>
         </div>
 
+        {/* ── 출시 예상 안내 배너 ──────────────────────────────────────────────────── */}
+        {program.status === 'expected' && (
+          <div className="bg-violet-50 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-800 rounded-2xl p-4 mb-4">
+            <div className="flex items-start gap-3">
+              <span className="text-2xl">🔔</span>
+              <div>
+                <p className="font-semibold text-violet-800 dark:text-violet-300 text-sm mb-1">
+                  아직 공고가 나지 않은 사업입니다 — 미리 준비하세요!
+                </p>
+                <p className="text-xs text-violet-700 dark:text-violet-400 leading-relaxed">
+                  이 사업은 <strong>{program.last_active_year ?? '작년'}년에 운영</strong>되었으며,
+                  {program.typical_open_month
+                    ? ` 보통 ${program.typical_open_month}월경에 모집 공고가 납니다.`
+                    : ' 유사한 일정으로 올해도 운영될 가능성이 높습니다.'}
+                  {' '}아래 서류를 미리 준비하고, 담당 기관에 문의해 두면 공고 즉시 빠르게 신청할 수 있어요.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* ── Key info + Match analysis ─────────────────────────────────────────── */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
 
@@ -313,12 +335,20 @@ export default function ProgramDetailPage() {
                   {program.support_type}
                 </InfoRow>
               )}
-              {(program.application_start || program.application_end) && (
+              {program.status === 'expected' ? (
+                <InfoRow icon={<Calendar size={15} className="text-violet-500" />} label="신청 기간">
+                  <span className="text-violet-600 dark:text-violet-400">
+                    {program.typical_open_month
+                      ? `${new Date().getFullYear()}년 ${program.typical_open_month}월경 예상 (미확정)`
+                      : `${program.last_active_year ?? new Date().getFullYear() - 1}년 운영 기준 올해 예상`}
+                  </span>
+                </InfoRow>
+              ) : (program.application_start || program.application_end) ? (
                 <InfoRow icon={<Calendar size={15} className="text-indigo-500" />} label="신청 기간">
                   {program.application_start ? format(new Date(program.application_start), 'yyyy.M.d') : '상시'}
                   {program.application_end && ` ~ ${format(new Date(program.application_end), 'yyyy.M.d')}`}
                 </InfoRow>
-              )}
+              ) : null}
               {program.target_regions.length > 0 && (
                 <InfoRow icon={<MapPin size={15} className="text-indigo-500" />} label="대상 지역">
                   {program.target_regions[0] === '전국' ? '전국' : program.target_regions.join(', ')}

@@ -119,10 +119,11 @@ export default function ProgramsPage() {
 
   const statusLabel = (s: string) => {
     switch (s) {
-      case 'open': return <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">모집중</span>;
+      case 'open':     return <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">모집중</span>;
       case 'upcoming': return <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400">예정</span>;
-      case 'closed': return <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400">마감</span>;
-      default: return <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400">상시</span>;
+      case 'closed':   return <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400">마감</span>;
+      case 'expected': return <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400">출시예상</span>;
+      default:         return <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400">상시</span>;
     }
   };
 
@@ -219,6 +220,7 @@ export default function ProgramsPage() {
                 <option value="">전체</option>
                 <option value="open">모집중</option>
                 <option value="upcoming">예정</option>
+                <option value="expected">출시예상 (작년기준)</option>
                 <option value="always">상시</option>
                 <option value="closed">마감</option>
               </select>
@@ -319,8 +321,15 @@ export default function ProgramsPage() {
                           최대 {program.funding_amount_max.toLocaleString()}만원
                         </span>
                       )}
-                      {program.application_end && (
+                      {program.status === 'expected' && program.typical_open_month ? (
+                        <span className="font-medium text-violet-600 dark:text-violet-400">
+                          📅 예상 {new Date().getFullYear()}년 {program.typical_open_month}월 모집
+                        </span>
+                      ) : program.application_end ? (
                         <span>마감 {format(new Date(program.application_end), 'M월 d일', { locale: ko })}</span>
+                      ) : null}
+                      {program.status === 'expected' && program.last_active_year && (
+                        <span className="text-violet-500 dark:text-violet-500">작년({program.last_active_year}) 기준</span>
                       )}
                       {program.target_regions.length > 0 && program.target_regions[0] !== '전국' && (
                         <span>📍 {program.target_regions.slice(0, 2).join(', ')}{program.target_regions.length > 2 ? ' 외' : ''}</span>

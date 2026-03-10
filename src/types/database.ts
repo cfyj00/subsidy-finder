@@ -79,6 +79,10 @@ export interface Program {
   required_documents: string[];
   detail_url: string | null;
   is_featured: boolean;
+  is_recurring?: boolean;                  // 매년 반복 여부 (DB default: false)
+  typical_open_month?: number | null;      // 보통 모집 시작 월 (1-12)
+  typical_duration_weeks?: number | null;  // 보통 모집 기간 (주)
+  last_active_year?: number | null;        // 마지막으로 운영된 연도
   last_synced_at: string | null;
   created_at: string;
   updated_at: string;

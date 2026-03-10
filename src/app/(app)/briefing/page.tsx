@@ -8,7 +8,7 @@ import type { Program, BusinessProfile, UserApplication, UserProgramMatch } from
 import {
   ArrowRight, AlertTriangle, CheckCheck, Clock,
   Search, MessageSquare, ClipboardList, Loader2,
-  Zap, Trophy, TrendingUp, Calendar, Lightbulb, BookOpen,
+  Zap, Trophy, TrendingUp, Calendar, Lightbulb, BookOpen, History,
 } from 'lucide-react';
 import { DAILY_TIPS } from '@/lib/constants';
 import { format, isToday, isTomorrow } from 'date-fns';
@@ -49,6 +49,7 @@ export default function BriefingPage() {
   const [applications, setApplications] = useState<UserApplication[]>([]);
   const [programs, setPrograms] = useState<Program[]>([]);
   const [matches, setMatches] = useState<UserProgramMatch[]>([]);
+  const [expectedPrograms, setExpectedPrograms] = useState<Program[]>([]);
   const [loading, setLoading] = useState(true);
 
   const loadAll = useCallback(async () => {
@@ -56,17 +57,19 @@ export default function BriefingPage() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setLoading(false); return; }
 
-    const [{ data: bp }, { data: apps }, { data: progs }, { data: matchData }] = await Promise.all([
+    const [{ data: bp }, { data: apps }, { data: progs }, { data: matchData }, { data: expectedProgs }] = await Promise.all([
       supabase.from('business_profiles').select('*').eq('user_id', user.id).single(),
       supabase.from('user_applications').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
       supabase.from('programs').select('*').eq('status', 'open').order('is_featured', { ascending: false }).limit(20),
       supabase.from('user_program_matches').select('*').eq('user_id', user.id),
+      supabase.from('programs').select('*').eq('status', 'expected').order('typical_open_month', { ascending: true }).limit(10),
     ]);
 
     setProfile(bp as BusinessProfile | null);
     setApplications((apps ?? []) as UserApplication[]);
     setPrograms((progs ?? []) as Program[]);
     setMatches((matchData ?? []) as UserProgramMatch[]);
+    setExpectedPrograms((expectedProgs ?? []) as Program[]);
     setLoading(false);
   }, []);
 
@@ -269,6 +272,44 @@ export default function BriefingPage() {
                         {dd.label}
                       </span>
                     )}
+                    <ArrowRight size={14} className="text-gray-300 dark:text-gray-600" />
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        </Section>
+      )}
+
+      {/* ── 올해 출시 예정 사업 ────────────────────────────────────────────── */}
+      {expectedPrograms.length > 0 && (
+        <Section
+          icon={<History size={15} className="text-violet-500" />}
+          title="작년 기준 — 올해 출시 예정 사업"
+          titleColor="text-violet-700 dark:text-violet-400"
+          bg="bg-violet-50 dark:bg-violet-900/10 border-violet-200 dark:border-violet-800"
+          action={{ label: '전체 보기', href: '/programs?status=expected' }}
+        >
+          <p className="text-xs text-violet-600 dark:text-violet-400 mb-3">
+            아직 공고가 나지 않았지만 작년에 운영된 사업이에요. 미리 준비해 두세요!
+          </p>
+          <div className="space-y-2">
+            {expectedPrograms.slice(0, 4).map(p => {
+              const month = p.typical_open_month;
+              const currentYear = new Date().getFullYear();
+              const estimateLabel = month
+                ? `예상 ${currentYear}년 ${month}월 모집`
+                : `작년 (${p.last_active_year ?? currentYear - 1}) 운영`;
+              return (
+                <Link key={p.id} href={`/programs/${p.id}`} className="flex items-center justify-between gap-3 p-3 bg-white dark:bg-slate-800 rounded-xl hover:bg-violet-50 dark:hover:bg-violet-900/20 transition-colors">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{p.title}</p>
+                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{p.managing_org}</p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-xs bg-violet-100 dark:bg-violet-900/40 text-violet-600 dark:text-violet-400 px-2 py-0.5 rounded-full font-medium">
+                      {estimateLabel}
+                    </span>
                     <ArrowRight size={14} className="text-gray-300 dark:text-gray-600" />
                   </div>
                 </Link>
