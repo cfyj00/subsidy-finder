@@ -25,6 +25,7 @@ export default function ProgramsPage() {
   const [filterStatus, setFilterStatus] = useState('');
   const [filterRegion, setFilterRegion] = useState('all');
   const [showFilters, setShowFilters] = useState(false);
+  const [filterBookmarked, setFilterBookmarked] = useState(false);
   const [seedLoading, setSeedLoading] = useState(false);
   const [seedMsg, setSeedMsg] = useState('');
 
@@ -100,13 +101,18 @@ export default function ProgramsPage() {
     return calculateMatch(businessProfile, program).score;
   };
 
+  const bookmarkCount = Object.values(matches).filter(m => m.is_bookmarked).length;
+
   const filteredPrograms = programs.filter(p => {
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
-      return p.title.toLowerCase().includes(q) || p.managing_org?.toLowerCase().includes(q) || p.description?.toLowerCase().includes(q);
+      if (!p.title.toLowerCase().includes(q) && !p.managing_org?.toLowerCase().includes(q) && !p.description?.toLowerCase().includes(q)) return false;
     }
     if (filterRegion !== 'all') {
-      return p.target_regions.length === 0 || p.target_regions.includes('전국') || p.target_regions.some(r => r.includes(filterRegion));
+      if (p.target_regions.length > 0 && !p.target_regions.includes('전국') && !p.target_regions.some(r => r.includes(filterRegion))) return false;
+    }
+    if (filterBookmarked) {
+      if (!matches[p.id]?.is_bookmarked) return false;
     }
     return true;
   });
@@ -166,6 +172,17 @@ export default function ProgramsPage() {
           )}
         </div>
         <button
+          onClick={() => setFilterBookmarked(!filterBookmarked)}
+          className={`flex items-center gap-1.5 px-3 py-2.5 border rounded-lg text-sm font-medium transition-colors ${
+            filterBookmarked
+              ? 'bg-amber-500 border-amber-500 text-white'
+              : 'border-gray-300 dark:border-slate-600 text-gray-600 dark:text-gray-300 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700'
+          }`}
+        >
+          <BookmarkCheck size={15} />
+          {filterBookmarked ? `북마크 ${bookmarkCount}` : '북마크'}
+        </button>
+        <button
           onClick={() => setShowFilters(!showFilters)}
           className={`flex items-center gap-1.5 px-3 py-2.5 border rounded-lg text-sm font-medium transition-colors ${
             showFilters
@@ -208,7 +225,7 @@ export default function ProgramsPage() {
             </div>
             <div className="flex items-end">
               <button
-                onClick={() => { setFilterCategory(''); setFilterStatus(''); setFilterRegion('all'); setSearchQuery(''); }}
+                onClick={() => { setFilterCategory(''); setFilterStatus(''); setFilterRegion('all'); setSearchQuery(''); setFilterBookmarked(false); }}
                 className="w-full px-3 py-2 text-sm text-gray-600 dark:text-gray-400 border border-gray-300 dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
               >
                 초기화
