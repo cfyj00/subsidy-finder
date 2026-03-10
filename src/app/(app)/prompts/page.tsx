@@ -95,12 +95,6 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
-// ── AI 서비스 링크 ─────────────────────────────────────────────────────────────
-const AI_LINKS = [
-  { name: 'ChatGPT', url: 'https://chat.openai.com', color: 'bg-emerald-600 hover:bg-emerald-700' },
-  { name: 'Claude',  url: 'https://claude.ai',       color: 'bg-orange-600 hover:bg-orange-700' },
-  { name: 'Gemini',  url: 'https://gemini.google.com', color: 'bg-blue-600 hover:bg-blue-700' },
-];
 
 // ── 메인 페이지 ────────────────────────────────────────────────────────────────
 export default function PromptsPage() {
@@ -189,7 +183,7 @@ export default function PromptsPage() {
       <div>
         <h1 className="text-2xl font-bold text-slate-900 dark:text-white">AI 프롬프트 라이브러리</h1>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          아래 프롬프트를 복사해서 ChatGPT, Claude, Gemini에 붙여넣으세요.
+          아래 프롬프트를 복사해서 원하는 AI 서비스에 붙여넣으세요.
           <span className="font-medium text-indigo-600 dark:text-indigo-400"> {profile.business_name}</span> 정보가 자동으로 포함됩니다.
         </p>
       </div>
@@ -263,25 +257,6 @@ export default function PromptsPage() {
             )}
           </div>
 
-          {/* AI 서비스 바로가기 */}
-          {generatedPrompt && (
-            <div>
-              <p className="text-xs text-slate-400 mb-2">복사 후 아래 AI 서비스에서 사용하세요:</p>
-              <div className="flex gap-2">
-                {AI_LINKS.map(ai => (
-                  <a
-                    key={ai.name}
-                    href={ai.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-colors ${ai.color}`}
-                  >
-                    {ai.name} 열기 →
-                  </a>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </div>
