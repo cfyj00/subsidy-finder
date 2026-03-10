@@ -116,16 +116,94 @@ export async function POST(req: Request) {
     }
   }
 
-  console.log(`[cron/sync-programs] bizinfo=${bizinfoItems.length} datagokr=${datagokrItems.length} upserted=${upserted} closed=${closed}`);
+  // ── 6. 반복 사업 자동화 ──────────────────────────────────────────────────
+  // 6a. 새로 open된 사업과 기존 expected/closed 사업 제목 매칭
+  //     → 같은 사업의 올해 버전이 나왔으면: 과거 것은 closed, 새 것은 is_recurring=true
+  let recurringLinked = 0;
+  const currentYear = new Date().getFullYear();
+
+  for (const p of parsed.filter(p => p.status === 'open' || p.status === 'upcoming')) {
+    const titleKey = p.title.replace(/\s+/g, '').substring(0, 12); // 공백 제거 후 앞 12자
+    if (titleKey.length < 5) continue;
+
+    // 작년 이전에 마감됐거나 expected 상태인 유사 사업 검색
+    const { data: prevVersions } = await admin
+      .from('programs')
+      .select('id, typical_open_month, last_active_year')
+      .in('status', ['closed', 'expected'])
+      .not('external_id', 'eq', p.external_id ?? '')
+      .ilike('title', `%${p.title.substring(0, 10)}%`)
+      .limit(3);
+
+    if (prevVersions && prevVersions.length > 0) {
+      const prev = prevVersions[0];
+      // 과거 버전: is_recurring 표시, closed 확정
+      await admin.from('programs').update({
+        is_recurring: true,
+        status: 'closed',
+        last_active_year: currentYear - 1,
+      }).eq('id', prev.id);
+
+      // 새 버전: is_recurring + typical_open_month 이어받기
+      const openMonth = p.application_start
+        ? new Date(p.application_start).getMonth() + 1
+        : (prev.typical_open_month ?? null);
+      await admin.from('programs').update({
+        is_recurring: true,
+        typical_open_month: openMonth,
+        last_active_year: currentYear,
+      }).eq('external_id', p.external_id ?? '');
+
+      recurringLinked++;
+    }
+  }
+
+  // 6b. is_recurring=true인데 작년에 마감 → 올해 아직 안 뜬 사업: expected로 전환
+  let expectedPromoted = 0;
+  const thisYearStart = `${currentYear}-01-01`;
+  const prevYearStart = `${currentYear - 1}-01-01`;
+
+  const { data: recurringClosed } = await admin
+    .from('programs')
+    .select('id, title, typical_open_month')
+    .eq('is_recurring', true)
+    .eq('status', 'closed')
+    .gte('application_end', prevYearStart)
+    .lt('application_end', thisYearStart);
+
+  for (const prog of (recurringClosed ?? [])) {
+    const titleKey = prog.title.substring(0, 10);
+    // 올해 open/upcoming 버전이 이미 있는지 확인
+    const { data: thisYearVersion } = await admin
+      .from('programs')
+      .select('id')
+      .in('status', ['open', 'upcoming'])
+      .ilike('title', `%${titleKey}%`)
+      .limit(1)
+      .maybeSingle();
+
+    if (!thisYearVersion) {
+      await admin.from('programs').update({
+        status: 'expected',
+        last_active_year: currentYear - 1,
+        last_synced_at: new Date().toISOString(),
+      }).eq('id', prog.id);
+      expectedPromoted++;
+    }
+  }
+
+  console.log(`[cron/sync-programs] bizinfo=${bizinfoItems.length} datagokr=${datagokrItems.length} upserted=${upserted} closed=${closed} recurringLinked=${recurringLinked} expectedPromoted=${expectedPromoted}`);
 
   return NextResponse.json({
-    ok:        true,
-    bizinfo:   bizinfoItems.length,
-    datagokr:  datagokrItems.length,
-    fetched:   parsed.length,
+    ok:               true,
+    bizinfo:          bizinfoItems.length,
+    datagokr:         datagokrItems.length,
+    fetched:          parsed.length,
     upserted,
     closed,
+    recurringLinked,
+    expectedPromoted,
     errors,
-    syncedAt:  new Date().toISOString(),
+    syncedAt:         new Date().toISOString(),
   });
 }
