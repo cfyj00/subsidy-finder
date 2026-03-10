@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Menu, Home, Search, ClipboardList, MessageSquare } from 'lucide-react';
+import { Menu, Home, Search, ClipboardList, Sparkles } from 'lucide-react';
 import { Sidebar } from './Sidebar';
 
 // ── 모바일 바텀 내비게이션 탭 ──────────────────────────────────────────────
@@ -11,7 +11,7 @@ const BOTTOM_TABS = [
   { href: '/briefing',     icon: Home,          label: '브리핑' },
   { href: '/programs',     icon: Search,         label: '지원사업' },
   { href: '/applications', icon: ClipboardList,  label: '지원관리' },
-  { href: '/consultant',   icon: MessageSquare,  label: 'AI상담' },
+  { href: '/prompts',      icon: Sparkles,      label: '프롬프트' },
 ] as const;
 
 export function AppShell({ children }: { children: React.ReactNode }) {
