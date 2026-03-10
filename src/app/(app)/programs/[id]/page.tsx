@@ -11,7 +11,14 @@ import {
   ArrowLeft, Bookmark, BookmarkCheck, ExternalLink, CheckCircle,
   XCircle, Calendar, Building2, MapPin, Users, DollarSign, Clock,
   Loader2, PlusCircle, Tag, FileText, X, CheckCheck, PlayCircle,
+  Sparkles, Copy, Check, ChevronDown, ChevronUp,
 } from 'lucide-react';
+import {
+  generateBusinessPlanPrompt,
+  generateEligibilityCheckPrompt,
+  generateDocumentChecklistPrompt,
+  generateInquiryPrompt,
+} from '@/lib/ai/prompt-generator';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 
@@ -112,6 +119,8 @@ export default function ProgramDetailPage() {
   const [bookmarkLoading, setBookmarkLoading] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [addedToTracker, setAddedToTracker] = useState(false);
+  const [showPrompts, setShowPrompts] = useState(false);
+  const [copiedPromptId, setCopiedPromptId] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     const supabase = getSupabaseBrowser();
@@ -472,6 +481,56 @@ export default function ProgramDetailPage() {
                 💬 이 사업 서류 준비, AI에게 물어보기 →
               </Link>
             </div>
+          </div>
+        )}
+
+        {/* ── 프롬프트 생성 ─────────────────────────────────────────────────────── */}
+        {businessProfile && (
+          <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl mb-4 overflow-hidden">
+            <button
+              onClick={() => setShowPrompts(v => !v)}
+              className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <Sparkles size={15} className="text-indigo-500" />
+                <span className="text-sm font-semibold text-gray-900 dark:text-white">AI 프롬프트 생성</span>
+                <span className="text-xs text-gray-400 dark:text-gray-500">복사 후 원하는 AI에 붙여넣기</span>
+              </div>
+              {showPrompts ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
+            </button>
+
+            {showPrompts && (() => {
+              const promptTemplates = [
+                { id: 'bizplan',     label: '사업계획서 작성',  fn: () => generateBusinessPlanPrompt(businessProfile, program) },
+                { id: 'eligibility', label: '자격요건 확인',    fn: () => generateEligibilityCheckPrompt(businessProfile, program) },
+                { id: 'documents',   label: '서류 체크리스트',  fn: () => generateDocumentChecklistPrompt(businessProfile, program) },
+                { id: 'inquiry',     label: '담당기관 문의 질문', fn: () => generateInquiryPrompt(businessProfile, program) },
+              ];
+              const handleCopy = (id: string, fn: () => string) => {
+                navigator.clipboard.writeText(fn()).then(() => {
+                  setCopiedPromptId(id);
+                  setTimeout(() => setCopiedPromptId(null), 2000);
+                });
+              };
+              return (
+                <div className="px-5 pb-4 grid grid-cols-2 gap-2 border-t border-gray-100 dark:border-slate-700 pt-3">
+                  {promptTemplates.map(({ id, label, fn }) => (
+                    <button
+                      key={id}
+                      onClick={() => handleCopy(id, fn)}
+                      className={`flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl text-xs font-medium border transition-colors ${
+                        copiedPromptId === id
+                          ? 'border-emerald-400 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:border-emerald-700 dark:text-emerald-400'
+                          : 'border-gray-200 dark:border-slate-600 text-gray-600 dark:text-gray-300 hover:border-indigo-300 hover:text-indigo-600 dark:hover:border-indigo-700 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20'
+                      }`}
+                    >
+                      {copiedPromptId === id ? <Check size={12} /> : <Copy size={12} />}
+                      {copiedPromptId === id ? '복사됨!' : label}
+                    </button>
+                  ))}
+                </div>
+              );
+            })()}
           </div>
         )}
 
