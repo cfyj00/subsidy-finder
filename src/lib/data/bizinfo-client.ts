@@ -62,12 +62,43 @@ export function parseKorDate(yyyymmdd: string | undefined | null): string | null
   return isNaN(date.getTime()) ? null : iso;
 }
 
+// ─── HTML 태그 제거 ────────────────────────────────────────────────────────
+
+function stripHtml(html: string | null | undefined): string | null {
+  if (!html) return null;
+  return html
+    .replace(/<[^>]+>/g, ' ')           // 태그 제거
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#[0-9]+;/g, '')
+    .replace(/\s{2,}/g, ' ')            // 연속 공백 정리
+    .trim() || null;
+}
+
 // ─── 상태 → DB status 매핑 ────────────────────────────────────────────────
 
-function mapStatus(pgmSttusNm: string): 'open' | 'upcoming' | 'closed' {
+function mapStatus(
+  pgmSttusNm: string,
+  startDate: string | null,
+  endDate: string | null,
+): 'open' | 'upcoming' | 'closed' {
   if (pgmSttusNm.includes('접수중'))   return 'open';
   if (pgmSttusNm.includes('접수예정')) return 'upcoming';
-  return 'closed';
+  if (pgmSttusNm.includes('접수마감')) return 'closed';
+
+  // pgmSttusNm이 비어있는 경우 → 날짜 기반 fallback
+  const now = Date.now();
+  const s   = startDate ? new Date(startDate).getTime() : null;
+  const e   = endDate   ? new Date(endDate).getTime()   : null;
+
+  if (e && now > e) return 'closed';
+  if (s && now < s) return 'upcoming';
+  // 날짜가 있거나 상태를 알 수 없는 경우 → open으로 처리
+  // (fetchAllOpenPrograms가 pblancSttus=Y/O 필터로 이미 open/upcoming만 가져옴)
+  return 'open';
 }
 
 // ─── 카테고리 추측 ────────────────────────────────────────────────────────
@@ -266,18 +297,21 @@ export function parseBizinfoItem(item: BizinfoListItem): ParsedProgram {
     });
   }
 
+  const start = parseKorDate(item.pbancBgngYmd);
+  const end   = parseKorDate(item.pbancEndYmd);
+
   return {
     external_id:       `bizinfo_${item.pblancId}`,
     source:            'bizinfo',
     title:             item.pblancNm,
     managing_org:      item.jrsdInsttNm || null,
     category:          guessCategory(item),
-    support_type:      null,           // 세부 정보 부족 — 상세 조회로 보완 가능
+    support_type:      null,
     target_regions:    regions,
-    application_start: parseKorDate(item.pbancBgngYmd),
-    application_end:   parseKorDate(item.pbancEndYmd),
-    status:            mapStatus(item.pgmSttusNm),
-    description:       item.bsnsSumryCn ?? null,
+    application_start: start,
+    application_end:   end,
+    status:            mapStatus(item.pgmSttusNm, start, end),
+    description:       stripHtml(item.bsnsSumryCn),  // HTML 태그 제거
     detail_url:        item.detlUrl ?? `https://www.bizinfo.go.kr/web/pgm/pgm030/view.do?pblancId=${item.pblancId}`,
     raw_data:          item as unknown as Record<string, unknown>,
     last_synced_at:    new Date().toISOString(),

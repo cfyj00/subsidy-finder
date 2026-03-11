@@ -37,8 +37,8 @@ export default function DashboardPage() {
     if (!user) return;
 
     const [{ data: bp }, { data: progs }] = await Promise.all([
-      supabase.from('business_profiles').select('*').eq('user_id', user.id).single(),
-      supabase.from('programs').select('*').in('status', ['open', 'always']).order('is_featured', { ascending: false }),
+      supabase.from('business_profiles').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
+      supabase.from('programs').select('*').in('status', ['open', 'upcoming']).order('is_featured', { ascending: false }),
     ]);
 
     setBusinessProfile(bp as BusinessProfile | null);
