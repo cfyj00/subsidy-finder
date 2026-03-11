@@ -1,17 +1,18 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { getSupabaseBrowser } from '@/lib/supabase-browser';
 import { useProfile } from '@/lib/profile-context';
 import { calculateMatch, getMatchLabel } from '@/lib/matching-engine';
 import { PROGRAM_CATEGORIES, SUPPORT_TYPES, CATEGORY_COLORS } from '@/lib/constants';
 import type { Program, BusinessProfile, UserProgramMatch } from '@/types/database';
+import type { NaverNewsItem } from '@/app/api/naver-news/route';
 import {
-  Search, SlidersHorizontal, Bookmark, BookmarkCheck,
-  ExternalLink, ChevronRight, Filter, X, Loader2
+  Search, Bookmark, BookmarkCheck,
+  ExternalLink, ChevronRight, Filter, X, Loader2, Newspaper
 } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { matchesSearch } from '@/lib/search-keywords';
 
@@ -29,6 +30,10 @@ export default function ProgramsPage() {
   const [filterBookmarked, setFilterBookmarked] = useState(false);
   const [seedLoading, setSeedLoading] = useState(false);
   const [seedMsg, setSeedMsg] = useState('');
+  // 뉴스
+  const [news, setNews] = useState<NaverNewsItem[]>([]);
+  const [newsLoading, setNewsLoading] = useState(false);
+  const newsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const loadData = useCallback(async () => {
     const supabase = getSupabaseBrowser();
@@ -59,6 +64,33 @@ export default function ProgramsPage() {
   }, [filterCategory, filterStatus]);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  // ── 뉴스 검색 (디바운스 600ms) ─────────────────────────────────────────────
+  useEffect(() => {
+    if (newsTimerRef.current) clearTimeout(newsTimerRef.current);
+
+    if (!searchQuery.trim()) {
+      setNews([]);
+      return;
+    }
+
+    newsTimerRef.current = setTimeout(async () => {
+      setNewsLoading(true);
+      try {
+        const res = await fetch(`/api/naver-news?q=${encodeURIComponent(searchQuery)}&display=5`);
+        const data = await res.json();
+        setNews(data.items ?? []);
+      } catch {
+        setNews([]);
+      } finally {
+        setNewsLoading(false);
+      }
+    }, 600);
+
+    return () => {
+      if (newsTimerRef.current) clearTimeout(newsTimerRef.current);
+    };
+  }, [searchQuery]);
 
   const toggleBookmark = async (programId: string) => {
     const supabase = getSupabaseBrowser();
@@ -262,6 +294,59 @@ export default function ProgramsPage() {
           </button>
         ))}
       </div>
+
+      {/* ── 뉴스 섹션 (검색어 입력 시에만 표시) ─────────────────────────── */}
+      {(newsLoading || news.length > 0) && searchQuery && (
+        <div className="mb-6">
+          <div className="flex items-center gap-2 mb-3">
+            <Newspaper size={15} className="text-blue-500" />
+            <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">관련 뉴스</span>
+            {newsLoading && <Loader2 size={13} className="animate-spin text-gray-400" />}
+          </div>
+          {newsLoading && news.length === 0 ? (
+            <div className="space-y-2">
+              {[1,2,3].map(i => (
+                <div key={i} className="h-14 bg-gray-100 dark:bg-slate-700 rounded-lg animate-pulse" />
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {news.map((item, idx) => {
+                // pubDate 파싱: "Mon, 10 Mar 2026 09:00:00 +0900"
+                let pubLabel = '';
+                try {
+                  pubLabel = format(new Date(item.pubDate), 'M월 d일', { locale: ko });
+                } catch { /* ignore */ }
+
+                return (
+                  <a
+                    key={idx}
+                    href={item.link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-start gap-3 p-3 bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900/30 rounded-xl hover:bg-blue-100 dark:hover:bg-blue-900/20 transition-colors group"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900 dark:text-white group-hover:text-blue-700 dark:group-hover:text-blue-400 line-clamp-1 transition-colors">
+                        {item.title}
+                      </p>
+                      {item.description && (
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-1">
+                          {item.description}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-shrink-0 text-xs text-gray-400">
+                      {pubLabel && <span>{pubLabel}</span>}
+                      <ExternalLink size={12} className="text-blue-400" />
+                    </div>
+                  </a>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Program list */}
       {loading ? (
