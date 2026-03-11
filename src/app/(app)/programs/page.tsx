@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
+import { matchesSearch } from '@/lib/search-keywords';
 
 export default function ProgramsPage() {
   const { profile } = useProfile();
@@ -104,13 +105,15 @@ export default function ProgramsPage() {
   const bookmarkCount = Object.values(matches).filter(m => m.is_bookmarked).length;
 
   const filteredPrograms = programs.filter(p => {
+    // ── 키워드 검색 (동의어 확장) ──────────────────
     if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      if (!p.title.toLowerCase().includes(q) && !p.managing_org?.toLowerCase().includes(q) && !p.description?.toLowerCase().includes(q)) return false;
+      if (!matchesSearch(p, searchQuery)) return false;
     }
+    // ── 지역 필터 ────────────────────────────────
     if (filterRegion !== 'all') {
       if (p.target_regions.length > 0 && !p.target_regions.includes('전국') && !p.target_regions.some(r => r.includes(filterRegion))) return false;
     }
+    // ── 북마크 필터 ──────────────────────────────
     if (filterBookmarked) {
       if (!matches[p.id]?.is_bookmarked) return false;
     }
@@ -163,7 +166,7 @@ export default function ProgramsPage() {
             type="text"
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            placeholder="사업명, 기관명으로 검색..."
+            placeholder="창업, 수출, R&D, 스마트팩토리, 인력 등 키워드 검색..."
             className="w-full pl-9 pr-4 py-2.5 border border-gray-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
           {searchQuery && (
@@ -270,7 +273,9 @@ export default function ProgramsPage() {
           <div className="text-4xl mb-3">🔍</div>
           <p className="text-gray-500 dark:text-gray-400 font-medium">검색 결과가 없습니다</p>
           <p className="text-gray-400 dark:text-gray-500 text-sm mt-1">
-            {programs.length === 0 ? '"데이터 로드" 버튼을 눌러 지원사업을 불러오세요.' : '다른 검색어나 필터를 시도해 보세요.'}
+            {programs.length === 0
+              ? '"데이터 로드" 버튼을 눌러 지원사업을 불러오세요.'
+              : '다른 키워드를 시도해 보세요. 예: 창업, 수출, R&D, 스마트팩토리, 인력지원'}
           </p>
         </div>
       ) : (

@@ -1,26 +1,19 @@
 /**
  * POST /api/cron/notify-deadlines
  *
- * 마감 D-7·D-3·D-1 알림을 생성하고 이메일을 발송합니다.
+ * 마감 D-30·D-20·D-10·D-5·D-1 인앱 알림을 생성합니다.
  * 매일 오전 9시 실행 (vercel.json 설정).
  *
  * 동작:
  * 1. user_applications 중 상태가 preparing/submitted/reviewing 인 항목 조회
- * 2. application_deadline 이 D-7·D-3·D-1인 경우 notifications 삽입 (중복 방지)
+ * 2. application_deadline 이 D-30·D-20·D-10·D-5·D-1인 경우 notifications 삽입 (중복 방지)
  * 3. user_program_matches 중 is_bookmarked=true 인 프로그램도 동일하게 처리
- * 4. 위 알림마다 Resend로 이메일 발송 (RESEND_API_KEY 설정 시)
  */
 
 import { NextResponse } from 'next/server';
 import { createSupabaseAdmin } from '@/lib/supabase-admin';
-import {
-  buildDeadlineEmailHtml,
-  buildDeadlineEmailText,
-} from '@/lib/email/templates';
 
-const DEADLINE_DAYS = [7, 3, 1] as const;
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://ji-jang.vercel.app';
-const FROM_EMAIL = process.env.RESEND_FROM_EMAIL ?? 'noreply@ji-jang.co.kr';
+const DEADLINE_DAYS = [30, 20, 10, 5, 1] as const;
 
 function daysUntil(isoDate: string): number {
   const now = new Date();
@@ -30,49 +23,12 @@ function daysUntil(isoDate: string): number {
   return Math.round((end.getTime() - now.getTime()) / 86_400_000);
 }
 
-/** Resend API를 통해 이메일 발송 */
-async function sendEmail(opts: {
-  to: string;
-  subject: string;
-  html: string;
-  text: string;
-}): Promise<boolean> {
-  const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) return false; // API 키 없으면 skip
-
-  try {
-    const res = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        from: `지실장 <${FROM_EMAIL}>`,
-        to: [opts.to],
-        subject: opts.subject,
-        html: opts.html,
-        text: opts.text,
-      }),
-    });
-    return res.ok;
-  } catch {
-    return false;
-  }
-}
-
-/** Supabase admin으로 user 이메일 조회 */
-async function getUserEmail(
-  admin: ReturnType<typeof createSupabaseAdmin>,
-  userId: string,
-): Promise<string | null> {
-  try {
-    const { data, error } = await admin.auth.admin.getUserById(userId);
-    if (error || !data?.user?.email) return null;
-    return data.user.email;
-  } catch {
-    return null;
-  }
+/** 남은 일수에 따른 이모지 */
+function deadlineEmoji(days: number): string {
+  if (days === 1)  return '🚨';
+  if (days <= 5)   return '⏰';
+  if (days <= 10)  return '📌';
+  return '📅';
 }
 
 export async function POST(req: Request) {
@@ -84,19 +40,9 @@ export async function POST(req: Request) {
   }
 
   const admin = createSupabaseAdmin();
-  let created   = 0;
-  let skipped   = 0;
-  let emailed   = 0;
+  let created = 0;
+  let skipped = 0;
   const errors: string[] = [];
-
-  // 이메일 캐시: 같은 유저에게 중복 API 호출 방지
-  const emailCache = new Map<string, string | null>();
-  async function getEmail(uid: string) {
-    if (emailCache.has(uid)) return emailCache.get(uid)!;
-    const email = await getUserEmail(admin, uid);
-    emailCache.set(uid, email);
-    return email;
-  }
 
   const today = new Date().toISOString().slice(0, 10);
 
@@ -114,7 +60,7 @@ export async function POST(req: Request) {
     const days = daysUntil(app.application_deadline);
     if (!(DEADLINE_DAYS as readonly number[]).includes(days)) continue;
 
-    // 중복 체크
+    // 중복 체크: 오늘 이미 같은 프로그램에 deadline 알림 있으면 skip
     const { data: exists } = await admin
       .from('notifications')
       .select('id')
@@ -127,12 +73,12 @@ export async function POST(req: Request) {
     if (exists) { skipped++; continue; }
 
     const title = (app.programs as { title?: string } | null)?.title ?? '지원사업';
+    const emoji = deadlineEmoji(days);
 
-    // in-app 알림 생성
     const { error: insertErr } = await admin.from('notifications').insert({
       user_id:    app.user_id,
       type:       'deadline',
-      title:      `마감 D-${days} ⏰`,
+      title:      `마감 D-${days} ${emoji}`,
       body:       `"${title}" 신청 마감이 ${days}일 남았습니다.`,
       link:       `/applications`,
       program_id: app.program_id,
@@ -140,35 +86,8 @@ export async function POST(req: Request) {
 
     if (insertErr) {
       errors.push(`알림 생성 실패(${app.id}): ${insertErr.message}`);
-      continue;
-    }
-    created++;
-
-    // 이메일 발송
-    const email = await getEmail(app.user_id);
-    if (email && days <= 3) { // D-3, D-1 만 이메일 발송
-      const programId = app.program_id ?? '';
-      const sent = await sendEmail({
-        to:      email,
-        subject: `[지실장] 마감 D-${days} ⏰ "${title}"`,
-        html:    buildDeadlineEmailHtml({
-          programTitle:   title,
-          daysLeft:       days,
-          applicationEnd: app.application_deadline,
-          programUrl:     `${APP_URL}/programs/${programId}`,
-          appUrl:         APP_URL,
-          isBookmark:     false,
-        }),
-        text: buildDeadlineEmailText({
-          programTitle:   title,
-          daysLeft:       days,
-          applicationEnd: app.application_deadline,
-          programUrl:     `${APP_URL}/programs/${programId}`,
-          appUrl:         APP_URL,
-          isBookmark:     false,
-        }),
-      });
-      if (sent) emailed++;
+    } else {
+      created++;
     }
   }
 
@@ -201,12 +120,12 @@ export async function POST(req: Request) {
     if (exists) { skipped++; continue; }
 
     const title = prog.title ?? '지원사업';
+    const emoji = deadlineEmoji(days);
 
-    // in-app 알림 생성
     const { error: insertErr } = await admin.from('notifications').insert({
       user_id:    bm.user_id,
       type:       'deadline',
-      title:      `마감 D-${days} ⏰`,
+      title:      `마감 D-${days} ${emoji}`,
       body:       `북마크한 "${title}" 신청 마감이 ${days}일 남았습니다.`,
       link:       `/programs`,
       program_id: bm.program_id,
@@ -214,41 +133,14 @@ export async function POST(req: Request) {
 
     if (insertErr) {
       errors.push(`북마크 알림 생성 실패: ${insertErr.message}`);
-      continue;
-    }
-    created++;
-
-    // 이메일 발송 (D-3, D-1)
-    const email = await getEmail(bm.user_id);
-    if (email && days <= 3) {
-      const programId = prog.id ?? bm.program_id ?? '';
-      const sent = await sendEmail({
-        to:      email,
-        subject: `[지실장] 마감 D-${days} ⏰ "${title}"`,
-        html:    buildDeadlineEmailHtml({
-          programTitle:   title,
-          daysLeft:       days,
-          applicationEnd: prog.application_end,
-          programUrl:     `${APP_URL}/programs/${programId}`,
-          appUrl:         APP_URL,
-          isBookmark:     true,
-        }),
-        text: buildDeadlineEmailText({
-          programTitle:   title,
-          daysLeft:       days,
-          applicationEnd: prog.application_end,
-          programUrl:     `${APP_URL}/programs/${programId}`,
-          appUrl:         APP_URL,
-          isBookmark:     true,
-        }),
-      });
-      if (sent) emailed++;
+    } else {
+      created++;
     }
   }
 
   console.log(
-    `[cron/notify-deadlines] created=${created} skipped=${skipped} emailed=${emailed} errors=${errors.length}`
+    `[cron/notify-deadlines] created=${created} skipped=${skipped} errors=${errors.length}`
   );
 
-  return NextResponse.json({ ok: true, created, skipped, emailed, errors });
+  return NextResponse.json({ ok: true, created, skipped, errors });
 }
