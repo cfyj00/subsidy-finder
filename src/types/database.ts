@@ -5,6 +5,7 @@ export interface Profile {
   phone: string | null;
   is_premium: boolean;
   onboarding_done: boolean;
+  active_business_profile_id: string | null; // 009_multi_profile
   created_at: string;
 }
 
@@ -12,6 +13,7 @@ export interface Profile {
 export interface BusinessProfile {
   id: string;
   user_id: string;
+  profile_name: string | null;  // 009_multi_profile: 프로필 별칭 (예: "본사", "2공장")
   business_name: string;
   business_reg_number: string | null;
   representative_name: string | null;
