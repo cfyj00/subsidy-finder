@@ -114,15 +114,44 @@ export function calculateMatch(profile: BusinessProfile, program: Program): Matc
   const reasons: string[] = [];
   const mismatches: string[] = [];
 
-  // 1. 지역 (20점)
-  if (program.target_regions.length === 0 || program.target_regions.includes('전국')) {
-    score += 20;
-    reasons.push('전국 대상 사업');
-  } else if (program.target_regions.some(r => r.includes(profile.region_sido) || profile.region_sido.includes(r))) {
-    score += 20;
-    reasons.push(`${profile.region_sido} 지역 대상`);
-  } else {
-    mismatches.push(`대상 지역: ${program.target_regions.join(', ')}`);
+  // 1. 지역 (20점) — 계층형 매칭: 시군구 > 시도 > 전국
+  {
+    const regions  = program.target_regions;
+    const sido     = profile.region_sido;      // 예: '충청북도'
+    const sigungu  = profile.region_sigungu;   // 예: '증평군' (nullable)
+
+    if (regions.length === 0 || regions.some(r => r.includes('전국') || r === '전 지역')) {
+      // 전국 대상
+      score += 20;
+      reasons.push('전국 대상 사업');
+
+    } else if (sigungu && regions.some(r => r.includes(sigungu))) {
+      // 정확한 시군구 매칭 (예: '충청북도 증평군' 또는 '증평군')
+      score += 20;
+      reasons.push(`${sido} ${sigungu} 지역 대상`);
+
+    } else if (regions.some(r => {
+      // 시도 단위 매칭 — 단, 다른 시군구가 명시된 경우는 제외
+      // 예: '충청북도' → 충북 사용자 20점
+      //     '충청북도 청주시' → 증평군 사용자는 점수 없음
+      if (!r.includes(sido)) return false;           // 다른 시도
+      // 시군구가 명시된 경우: '충청북도 청주시' → 내 시군구와 다르면 skip
+      if (sigungu && r !== sido && !r.includes(sigungu)) return false;
+      return true;
+    })) {
+      score += 20;
+      reasons.push(`${sido} 지역 대상`);
+
+    } else if (sigungu && regions.some(r => r.includes(sido))) {
+      // 같은 시도지만 다른 시군구 대상 (예: 충북 청주시 사업 vs 증평군 사용자)
+      // → 5점 (완전 제외보다는 참고용으로 표시)
+      score += 5;
+      // reasons에는 추가하지 않음 (mismatch로 표시)
+      mismatches.push(`대상 지역: ${regions.join(', ')} (다른 시군구)`);
+
+    } else {
+      mismatches.push(`대상 지역: ${regions.join(', ')}`);
+    }
   }
 
   // 2. 업종 (20점)
