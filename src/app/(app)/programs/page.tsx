@@ -4,9 +4,10 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { getSupabaseBrowser } from '@/lib/supabase-browser';
 import { useProfile } from '@/lib/profile-context';
+import { useBusinessProfile } from '@/lib/business-profile-context';
 import { calculateMatch, getMatchLabel } from '@/lib/matching-engine';
 import { PROGRAM_CATEGORIES, CATEGORY_COLORS } from '@/lib/constants';
-import type { Program, BusinessProfile, UserProgramMatch } from '@/types/database';
+import type { Program, UserProgramMatch } from '@/types/database';
 import type { NaverNewsItem } from '@/app/api/naver-news/route';
 import {
   Search, Bookmark, BookmarkCheck,
@@ -18,8 +19,8 @@ import { matchesSearch } from '@/lib/search-keywords';
 
 export default function ProgramsPage() {
   const { profile } = useProfile();
+  const { activeProfile: businessProfile } = useBusinessProfile();
   const [programs, setPrograms] = useState<Program[]>([]);
-  const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
   const [matches, setMatches] = useState<Record<string, UserProgramMatch>>({});
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -40,9 +41,6 @@ export default function ProgramsPage() {
     const supabase = getSupabaseBrowser();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
-
-    const { data: bp } = await supabase.from('business_profiles').select('*').eq('user_id', user.id).single();
-    setBusinessProfile(bp as BusinessProfile | null);
 
     let query = supabase.from('programs').select('*').order('is_featured', { ascending: false }).order('created_at', { ascending: false });
     if (filterCategory) query = query.eq('category', filterCategory);
@@ -124,8 +122,30 @@ export default function ProgramsPage() {
       if (p.target_regions.length > 0 && !p.target_regions.includes('전국') && !p.target_regions.some(r => r.includes(filterRegion))) return false;
     }
     if (filterBookmarked && !matches[p.id]?.is_bookmarked) return false;
-    // 내사업검색: 매칭 점수 40점 이상만
+
+    // 내사업검색: 마감 제외 + 내 지역 필터 + 매칭 점수 40점 이상
     if (filterMyBusiness && businessProfile) {
+      // 마감된 사업 제외 (open / upcoming / expected 만 표시)
+      if (p.status === 'closed') return false;
+
+      // 지역 하드 필터: 전국 대상이거나 내 지역 포함한 사업만
+      const regions = p.target_regions;
+      if (regions.length > 0) {
+        const isNationwide = regions.some(r =>
+          r.includes('전국') || r.includes('전 지역') || r === '전체'
+        );
+        if (!isNationwide) {
+          const sido    = businessProfile.region_sido;     // 예: '경기도'
+          const sigungu = businessProfile.region_sigungu;  // 예: '수원시'
+          const inRegion = regions.some(r =>
+            (sido    && r.includes(sido))    ||
+            (sigungu && r.includes(sigungu))
+          );
+          if (!inRegion) return false;
+        }
+      }
+
+      // 매칭 점수 40점 이상만
       const score = getMatchScore(p.id) ?? 0;
       if (score < 40) return false;
     }
