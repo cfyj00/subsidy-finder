@@ -5,14 +5,14 @@ import Link from 'next/link';
 import { getSupabaseBrowser } from '@/lib/supabase-browser';
 import { useProfile } from '@/lib/profile-context';
 import { calculateMatch, getMatchLabel } from '@/lib/matching-engine';
-import { PROGRAM_CATEGORIES, SUPPORT_TYPES, CATEGORY_COLORS } from '@/lib/constants';
+import { PROGRAM_CATEGORIES, CATEGORY_COLORS } from '@/lib/constants';
 import type { Program, BusinessProfile, UserProgramMatch } from '@/types/database';
 import type { NaverNewsItem } from '@/app/api/naver-news/route';
 import {
   Search, Bookmark, BookmarkCheck,
-  ExternalLink, ChevronRight, Filter, X, Loader2, Newspaper
+  ExternalLink, ChevronRight, Filter, X, Loader2, Newspaper, Sparkles
 } from 'lucide-react';
-import { format, parseISO } from 'date-fns';
+import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { matchesSearch } from '@/lib/search-keywords';
 
@@ -28,6 +28,7 @@ export default function ProgramsPage() {
   const [filterRegion, setFilterRegion] = useState('all');
   const [showFilters, setShowFilters] = useState(false);
   const [filterBookmarked, setFilterBookmarked] = useState(false);
+  const [filterMyBusiness, setFilterMyBusiness] = useState(false);
   const [seedLoading, setSeedLoading] = useState(false);
   const [seedMsg, setSeedMsg] = useState('');
   // 뉴스
@@ -40,23 +41,16 @@ export default function ProgramsPage() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    // Load business profile
     const { data: bp } = await supabase.from('business_profiles').select('*').eq('user_id', user.id).single();
     setBusinessProfile(bp as BusinessProfile | null);
 
-    // Load programs
     let query = supabase.from('programs').select('*').order('is_featured', { ascending: false }).order('created_at', { ascending: false });
     if (filterCategory) query = query.eq('category', filterCategory);
-    if (filterStatus) query = query.eq('status', filterStatus);
+    if (filterStatus)   query = query.eq('status', filterStatus);
     const { data: progs } = await query;
     setPrograms((progs || []) as Program[]);
 
-    // Load existing matches/bookmarks
-    const { data: matchData } = await supabase
-      .from('user_program_matches')
-      .select('*')
-      .eq('user_id', user.id);
-
+    const { data: matchData } = await supabase.from('user_program_matches').select('*').eq('user_id', user.id);
     const matchMap: Record<string, UserProgramMatch> = {};
     (matchData || []).forEach((m: UserProgramMatch) => { matchMap[m.program_id] = m; });
     setMatches(matchMap);
@@ -65,14 +59,10 @@ export default function ProgramsPage() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  // ── 뉴스 검색 (디바운스 600ms) ─────────────────────────────────────────────
+  // ── 뉴스 검색 (디바운스 600ms) ──────────────────────────────────────────────
   useEffect(() => {
     if (newsTimerRef.current) clearTimeout(newsTimerRef.current);
-
-    if (!searchQuery.trim()) {
-      setNews([]);
-      return;
-    }
+    if (!searchQuery.trim()) { setNews([]); return; }
 
     newsTimerRef.current = setTimeout(async () => {
       setNewsLoading(true);
@@ -80,23 +70,17 @@ export default function ProgramsPage() {
         const res = await fetch(`/api/naver-news?q=${encodeURIComponent(searchQuery)}&display=5`);
         const data = await res.json();
         setNews(data.items ?? []);
-      } catch {
-        setNews([]);
-      } finally {
-        setNewsLoading(false);
-      }
+      } catch { setNews([]); }
+      finally { setNewsLoading(false); }
     }, 600);
 
-    return () => {
-      if (newsTimerRef.current) clearTimeout(newsTimerRef.current);
-    };
+    return () => { if (newsTimerRef.current) clearTimeout(newsTimerRef.current); };
   }, [searchQuery]);
 
   const toggleBookmark = async (programId: string) => {
     const supabase = getSupabaseBrowser();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
-
     const existing = matches[programId];
     if (existing) {
       await supabase.from('user_program_matches').update({ is_bookmarked: !existing.is_bookmarked }).eq('id', existing.id);
@@ -105,12 +89,9 @@ export default function ProgramsPage() {
       const program = programs.find(p => p.id === programId);
       const matchResult = businessProfile && program ? calculateMatch(businessProfile, program) : { score: 0, reasons: [], mismatches: [] };
       const { data: newMatch } = await supabase.from('user_program_matches').insert({
-        user_id: user.id,
-        program_id: programId,
-        match_score: matchResult.score,
-        match_reasons: matchResult.reasons,
-        mismatch_reasons: matchResult.mismatches,
-        is_bookmarked: true,
+        user_id: user.id, program_id: programId,
+        match_score: matchResult.score, match_reasons: matchResult.reasons,
+        mismatch_reasons: matchResult.mismatches, is_bookmarked: true,
       }).select().single();
       if (newMatch) setMatches(prev => ({ ...prev, [programId]: newMatch as UserProgramMatch }));
     }
@@ -118,7 +99,7 @@ export default function ProgramsPage() {
 
   const handleSeed = async () => {
     setSeedLoading(true);
-    const res = await fetch('/api/seed', { method: 'POST' });
+    const res  = await fetch('/api/seed', { method: 'POST' });
     const data = await res.json();
     setSeedMsg(data.message);
     setSeedLoading(false);
@@ -136,21 +117,25 @@ export default function ProgramsPage() {
 
   const bookmarkCount = Object.values(matches).filter(m => m.is_bookmarked).length;
 
-  const filteredPrograms = programs.filter(p => {
-    // ── 키워드 검색 (동의어 확장) ──────────────────
-    if (searchQuery) {
-      if (!matchesSearch(p, searchQuery)) return false;
-    }
-    // ── 지역 필터 ────────────────────────────────
+  // ── 필터 + 정렬 ────────────────────────────────────────────────────────────
+  let filteredPrograms = programs.filter(p => {
+    if (searchQuery && !matchesSearch(p, searchQuery)) return false;
     if (filterRegion !== 'all') {
       if (p.target_regions.length > 0 && !p.target_regions.includes('전국') && !p.target_regions.some(r => r.includes(filterRegion))) return false;
     }
-    // ── 북마크 필터 ──────────────────────────────
-    if (filterBookmarked) {
-      if (!matches[p.id]?.is_bookmarked) return false;
+    if (filterBookmarked && !matches[p.id]?.is_bookmarked) return false;
+    // 내사업검색: 매칭 점수 40점 이상만
+    if (filterMyBusiness && businessProfile) {
+      const score = getMatchScore(p.id) ?? 0;
+      if (score < 40) return false;
     }
     return true;
   });
+
+  // 내사업검색 모드: 점수 높은 순 정렬
+  if (filterMyBusiness && businessProfile) {
+    filteredPrograms = [...filteredPrograms].sort((a, b) => (getMatchScore(b.id) ?? 0) - (getMatchScore(a.id) ?? 0));
+  }
 
   const statusLabel = (s: string) => {
     switch (s) {
@@ -164,6 +149,7 @@ export default function ProgramsPage() {
 
   return (
     <div className="px-4 py-6 max-w-5xl mx-auto">
+
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
@@ -172,12 +158,9 @@ export default function ProgramsPage() {
         </div>
         <div className="flex gap-2">
           {programs.length === 0 && !loading && (
-            <button
-              onClick={handleSeed}
-              disabled={seedLoading}
-              className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition-colors"
-            >
-              {seedLoading ? <Loader2 size={14} className="animate-spin" /> : null}
+            <button onClick={handleSeed} disabled={seedLoading}
+              className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition-colors">
+              {seedLoading && <Loader2 size={14} className="animate-spin" />}
               데이터 로드
             </button>
           )}
@@ -190,14 +173,29 @@ export default function ProgramsPage() {
         </div>
       )}
 
+      {/* ── 내사업검색 활성 배너 ──────────────────────────────────────────── */}
+      {filterMyBusiness && businessProfile && (
+        <div className="mb-4 flex items-center gap-3 p-3 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl">
+          <Sparkles size={16} className="text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
+          <p className="text-sm text-emerald-700 dark:text-emerald-300 flex-1">
+            <span className="font-semibold">{businessProfile.business_name}</span> 에 맞는 사업만 표시 중 · 매칭 점수 높은 순
+          </p>
+          <button onClick={() => setFilterMyBusiness(false)} className="text-emerald-500 hover:text-emerald-700">
+            <X size={14} />
+          </button>
+        </div>
+      )}
+      {filterMyBusiness && !businessProfile && (
+        <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl text-sm text-amber-700 dark:text-amber-300">
+          ⚠️ 내사업검색을 사용하려면 먼저 <Link href="/profile" className="font-semibold underline">사업 프로필</Link>을 등록하세요.
+        </div>
+      )}
+
       {/* Search + Filter bar */}
       <div className="flex gap-2 mb-4">
         <div className="flex-1 relative">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
+          <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
             placeholder="창업, 수출, R&D, 스마트팩토리, 인력 등 키워드 검색..."
             className="w-full pl-9 pr-4 py-2.5 border border-gray-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
@@ -207,6 +205,21 @@ export default function ProgramsPage() {
             </button>
           )}
         </div>
+
+        {/* 내사업검색 버튼 */}
+        <button
+          onClick={() => setFilterMyBusiness(!filterMyBusiness)}
+          className={`flex items-center gap-1.5 px-3 py-2.5 border rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
+            filterMyBusiness
+              ? 'bg-emerald-600 border-emerald-600 text-white'
+              : 'border-gray-300 dark:border-slate-600 text-gray-600 dark:text-gray-300 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700'
+          }`}
+        >
+          <Sparkles size={15} />
+          내사업검색
+        </button>
+
+        {/* 북마크 버튼 */}
         <button
           onClick={() => setFilterBookmarked(!filterBookmarked)}
           className={`flex items-center gap-1.5 px-3 py-2.5 border rounded-lg text-sm font-medium transition-colors ${
@@ -216,8 +229,10 @@ export default function ProgramsPage() {
           }`}
         >
           <BookmarkCheck size={15} />
-          {filterBookmarked ? `북마크 ${bookmarkCount}` : '북마크'}
+          {filterBookmarked ? `${bookmarkCount}` : '북마크'}
         </button>
+
+        {/* 필터 버튼 */}
         <button
           onClick={() => setShowFilters(!showFilters)}
           className={`flex items-center gap-1.5 px-3 py-2.5 border rounded-lg text-sm font-medium transition-colors ${
@@ -236,22 +251,16 @@ export default function ProgramsPage() {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">카테고리</label>
-              <select
-                value={filterCategory}
-                onChange={e => setFilterCategory(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              >
+              <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
                 <option value="">전체</option>
                 {PROGRAM_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">모집 상태</label>
-              <select
-                value={filterStatus}
-                onChange={e => setFilterStatus(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              >
+              <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
                 <option value="">전체</option>
                 <option value="open">모집중</option>
                 <option value="upcoming">예정</option>
@@ -262,10 +271,9 @@ export default function ProgramsPage() {
             </div>
             <div className="flex items-end">
               <button
-                onClick={() => { setFilterCategory(''); setFilterStatus(''); setFilterRegion('all'); setSearchQuery(''); setFilterBookmarked(false); }}
-                className="w-full px-3 py-2 text-sm text-gray-600 dark:text-gray-400 border border-gray-300 dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
-              >
-                초기화
+                onClick={() => { setFilterCategory(''); setFilterStatus(''); setFilterRegion('all'); setSearchQuery(''); setFilterBookmarked(false); setFilterMyBusiness(false); }}
+                className="w-full px-3 py-2 text-sm text-gray-600 dark:text-gray-400 border border-gray-300 dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors">
+                전체 초기화
               </button>
             </div>
           </div>
@@ -274,28 +282,19 @@ export default function ProgramsPage() {
 
       {/* Category quick filter */}
       <div className="flex gap-2 mb-4 overflow-x-auto pb-1">
-        <button
-          onClick={() => setFilterCategory('')}
-          className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors border ${
-            !filterCategory ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-gray-300 dark:border-slate-600 text-gray-600 dark:text-gray-300 hover:border-indigo-400'
-          }`}
-        >
+        <button onClick={() => setFilterCategory('')}
+          className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors border ${!filterCategory ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-gray-300 dark:border-slate-600 text-gray-600 dark:text-gray-300 hover:border-indigo-400'}`}>
           전체
         </button>
         {PROGRAM_CATEGORIES.map(c => (
-          <button
-            key={c.value}
-            onClick={() => setFilterCategory(filterCategory === c.value ? '' : c.value)}
-            className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors border ${
-              filterCategory === c.value ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-gray-300 dark:border-slate-600 text-gray-600 dark:text-gray-300 hover:border-indigo-400'
-            }`}
-          >
+          <button key={c.value} onClick={() => setFilterCategory(filterCategory === c.value ? '' : c.value)}
+            className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors border ${filterCategory === c.value ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-gray-300 dark:border-slate-600 text-gray-600 dark:text-gray-300 hover:border-indigo-400'}`}>
             {c.label}
           </button>
         ))}
       </div>
 
-      {/* ── 뉴스 섹션 (검색어 입력 시에만 표시) ─────────────────────────── */}
+      {/* ── 뉴스 섹션 ─────────────────────────────────────────────────────── */}
       {(newsLoading || news.length > 0) && searchQuery && (
         <div className="mb-6">
           <div className="flex items-center gap-2 mb-3">
@@ -305,36 +304,19 @@ export default function ProgramsPage() {
           </div>
           {newsLoading && news.length === 0 ? (
             <div className="space-y-2">
-              {[1,2,3].map(i => (
-                <div key={i} className="h-14 bg-gray-100 dark:bg-slate-700 rounded-lg animate-pulse" />
-              ))}
+              {[1,2,3].map(i => <div key={i} className="h-14 bg-gray-100 dark:bg-slate-700 rounded-lg animate-pulse" />)}
             </div>
           ) : (
             <div className="space-y-2">
               {news.map((item, idx) => {
-                // pubDate 파싱: "Mon, 10 Mar 2026 09:00:00 +0900"
                 let pubLabel = '';
-                try {
-                  pubLabel = format(new Date(item.pubDate), 'M월 d일', { locale: ko });
-                } catch { /* ignore */ }
-
+                try { pubLabel = format(new Date(item.pubDate), 'M월 d일', { locale: ko }); } catch { /* ignore */ }
                 return (
-                  <a
-                    key={idx}
-                    href={item.link}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-start gap-3 p-3 bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900/30 rounded-xl hover:bg-blue-100 dark:hover:bg-blue-900/20 transition-colors group"
-                  >
+                  <a key={idx} href={item.link} target="_blank" rel="noopener noreferrer"
+                    className="flex items-start gap-3 p-3 bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900/30 rounded-xl hover:bg-blue-100 dark:hover:bg-blue-900/20 transition-colors group">
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 dark:text-white group-hover:text-blue-700 dark:group-hover:text-blue-400 line-clamp-1 transition-colors">
-                        {item.title}
-                      </p>
-                      {item.description && (
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-1">
-                          {item.description}
-                        </p>
-                      )}
+                      <p className="text-sm font-medium text-gray-900 dark:text-white group-hover:text-blue-700 dark:group-hover:text-blue-400 line-clamp-1 transition-colors">{item.title}</p>
+                      {item.description && <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-1">{item.description}</p>}
                     </div>
                     <div className="flex items-center gap-1.5 flex-shrink-0 text-xs text-gray-400">
                       {pubLabel && <span>{pubLabel}</span>}
@@ -355,29 +337,35 @@ export default function ProgramsPage() {
         </div>
       ) : filteredPrograms.length === 0 ? (
         <div className="text-center py-20">
-          <div className="text-4xl mb-3">🔍</div>
-          <p className="text-gray-500 dark:text-gray-400 font-medium">검색 결과가 없습니다</p>
+          <div className="text-4xl mb-3">{filterMyBusiness ? '🎯' : '🔍'}</div>
+          <p className="text-gray-500 dark:text-gray-400 font-medium">
+            {filterMyBusiness ? '매칭되는 사업이 없습니다' : '검색 결과가 없습니다'}
+          </p>
           <p className="text-gray-400 dark:text-gray-500 text-sm mt-1">
             {programs.length === 0
               ? '"데이터 로드" 버튼을 눌러 지원사업을 불러오세요.'
+              : filterMyBusiness
+              ? '사업 프로필을 보완하거나 필터를 조정해 보세요.'
               : '다른 키워드를 시도해 보세요. 예: 창업, 수출, R&D, 스마트팩토리, 인력지원'}
           </p>
         </div>
       ) : (
         <div className="space-y-3">
           {filteredPrograms.map(program => {
-            const score = getMatchScore(program.id);
+            const score     = getMatchScore(program.id);
             const matchInfo = score !== null ? getMatchLabel(score) : null;
             const bookmarked = matches[program.id]?.is_bookmarked;
-            const daysLeft = program.application_end
-              ? Math.ceil((new Date(program.application_end).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+            const daysLeft  = program.application_end
+              ? Math.ceil((new Date(program.application_end).getTime() - Date.now()) / 86_400_000)
               : null;
 
             return (
-              <div
-                key={program.id}
-                className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl p-4 hover:border-indigo-300 dark:hover:border-indigo-700 transition-colors"
-              >
+              <div key={program.id}
+                className={`bg-white dark:bg-slate-800 border rounded-xl p-4 transition-colors hover:border-indigo-300 dark:hover:border-indigo-700 ${
+                  filterMyBusiness && score !== null && score >= 80
+                    ? 'border-emerald-300 dark:border-emerald-700'
+                    : 'border-gray-200 dark:border-slate-700'
+                }`}>
                 <div className="flex items-start gap-3">
                   <div className="flex-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-2 mb-1.5">
@@ -386,14 +374,10 @@ export default function ProgramsPage() {
                       </span>
                       {statusLabel(program.status)}
                       {program.is_featured && (
-                        <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400">
-                          ⭐ 추천
-                        </span>
+                        <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400">⭐ 추천</span>
                       )}
                       {daysLeft !== null && daysLeft >= 0 && daysLeft <= 14 && (
-                        <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">
-                          D-{daysLeft}
-                        </span>
+                        <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">D-{daysLeft}</span>
                       )}
                     </div>
                     <Link href={`/programs/${program.id}`} className="group">
@@ -419,7 +403,7 @@ export default function ProgramsPage() {
                         <span>마감 {format(new Date(program.application_end), 'M월 d일', { locale: ko })}</span>
                       ) : null}
                       {program.status === 'expected' && program.last_active_year && (
-                        <span className="text-violet-500 dark:text-violet-500">작년({program.last_active_year}) 기준</span>
+                        <span className="text-violet-500">작년({program.last_active_year}) 기준</span>
                       )}
                       {program.target_regions.length > 0 && program.target_regions[0] !== '전국' && (
                         <span>📍 {program.target_regions.slice(0, 2).join(', ')}{program.target_regions.length > 2 ? ' 외' : ''}</span>
@@ -437,10 +421,8 @@ export default function ProgramsPage() {
                       </div>
                     )}
                     <div className="flex gap-1">
-                      <button
-                        onClick={() => toggleBookmark(program.id)}
-                        className={`p-1.5 rounded-lg transition-colors ${bookmarked ? 'text-amber-500 hover:text-amber-600' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'}`}
-                      >
+                      <button onClick={() => toggleBookmark(program.id)}
+                        className={`p-1.5 rounded-lg transition-colors ${bookmarked ? 'text-amber-500 hover:text-amber-600' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'}`}>
                         {bookmarked ? <BookmarkCheck size={18} /> : <Bookmark size={18} />}
                       </button>
                       <Link href={`/programs/${program.id}`} className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">

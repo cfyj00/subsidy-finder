@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Copy, Check, FileText, Search, ClipboardList, MessageSquare, Lightbulb, ChevronDown } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { getSupabaseBrowser } from '@/lib/supabase-browser';
 import type { BusinessProfile, Program } from '@/types/database';
 import {
   generateConsultingPrompt,
@@ -107,6 +107,7 @@ export default function PromptsPage() {
 
   useEffect(() => {
     async function load() {
+      const supabase = getSupabaseBrowser();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { setLoading(false); return; }
 
