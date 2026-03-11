@@ -2,12 +2,13 @@
  * POST /api/cron/sync-programs
  *
  * Vercel Cron Job이 호출하는 엔드포인트.
- * 5개 데이터 소스를 병렬 수집 후 Supabase에 upsert합니다:
+ * 4개 데이터 소스를 병렬 수집 후 Supabase에 upsert합니다:
  *   1. Bizinfo (기업마당) - 중앙정부 지원사업
  *   2. data.go.kr (중소벤처기업부) - 중기부 사업공고
- *   3. Gov24 (보조금24 행정안전부) - 중앙+지자체 보조금
- *   4. K-Startup (창업진흥원) - 창업·벤처 지원사업
- *   5. 광역시도 (서울/경기/부산) - 지자체 사업 (키 있는 경우만)
+ *   3. K-Startup (창업진흥원) - 창업·벤처 지원사업
+ *   4. 광역시도 (서울/경기/부산) - 지자체 사업 (키 있는 경우만)
+ *
+ * 참고: 보조금24(Gov24)는 data.go.kr에 서비스 없음 → 제외
  *
  * vercel.json 설정:
  * { "crons": [{ "path": "/api/cron/sync-programs", "schedule": "0 2 * * *" }] }
@@ -23,10 +24,6 @@ import {
   fetchAllMssBizPrograms,
   parseDataGoKrItem,
 } from '@/lib/data/data-go-kr-client';
-import {
-  fetchAllGov24Programs,
-  parseGov24Item,
-} from '@/lib/data/gov24-client';
 import {
   fetchAllKStartupPrograms,
   parseKStartupItem,
@@ -48,8 +45,7 @@ export async function POST(req: Request) {
   // ── 2. 최소 API 키 확인 ─────────────────────────────────────────────────
   const hasAnyKey =
     !!process.env.BIZINFO_API_KEY ||
-    !!process.env.DATA_GO_KR_API_KEY ||
-    !!process.env.GOV24_API_KEY;
+    !!process.env.DATA_GO_KR_API_KEY;
 
   if (!hasAnyKey) {
     return NextResponse.json({ error: 'API 키 미설정' }, { status: 503 });
@@ -59,16 +55,12 @@ export async function POST(req: Request) {
   const [
     bizinfoResult,
     datagokrResult,
-    gov24Result,
     kstartupResult,
     localGovResult,
   ] = await Promise.allSettled([
     fetchAllOpenPrograms({ maxPages: 20, includeUpcoming: true }),
     process.env.DATA_GO_KR_API_KEY
       ? fetchAllMssBizPrograms({ maxPages: 10, daysBack: 180 })
-      : Promise.resolve([]),
-    process.env.GOV24_API_KEY || process.env.DATA_GO_KR_API_KEY
-      ? fetchAllGov24Programs({ maxPages: 10 })
       : Promise.resolve([]),
     process.env.KSTARTUP_API_KEY || process.env.DATA_GO_KR_API_KEY
       ? fetchAllKStartupPrograms({ maxPages: 5 })
@@ -79,22 +71,19 @@ export async function POST(req: Request) {
   // 결과 추출
   const bizinfoItems  = bizinfoResult.status  === 'fulfilled' ? bizinfoResult.value  : [];
   const datagokrItems = datagokrResult.status === 'fulfilled' ? datagokrResult.value : [];
-  const gov24Items    = gov24Result.status    === 'fulfilled' ? gov24Result.value    : [];
   const kstartupItems = kstartupResult.status === 'fulfilled' ? kstartupResult.value : [];
   const localGovData  = localGovResult.status === 'fulfilled' ? localGovResult.value : { programs: [], errors: [], counts: {} };
 
   const errors: string[] = [];
   if (bizinfoResult.status  === 'rejected') errors.push(`Bizinfo: ${bizinfoResult.reason}`);
   if (datagokrResult.status === 'rejected') errors.push(`data.go.kr: ${datagokrResult.reason}`);
-  if (gov24Result.status    === 'rejected') errors.push(`Gov24: ${gov24Result.reason}`);
   if (kstartupResult.status === 'rejected') errors.push(`K-Startup: ${kstartupResult.reason}`);
   if (localGovResult.status === 'rejected') errors.push(`광역시도: ${localGovResult.reason}`);
   errors.push(...localGovData.errors);
 
   const totalFetched =
     bizinfoItems.length + datagokrItems.length +
-    gov24Items.length   + kstartupItems.length +
-    localGovData.programs.length;
+    kstartupItems.length + localGovData.programs.length;
 
   if (totalFetched === 0) {
     return NextResponse.json({ error: '수집된 데이터 없음', errors }, { status: 502 });
@@ -106,7 +95,6 @@ export async function POST(req: Request) {
   const parsed: ParsedProgram[] = [
     ...bizinfoItems.map(parseBizinfoItem),
     ...datagokrItems.map(parseDataGoKrItem),
-    ...gov24Items.map(parseGov24Item),
     ...kstartupItems.map(parseKStartupItem),
     ...localGovData.programs,         // 이미 ParsedProgram[]
   ];
@@ -148,7 +136,6 @@ export async function POST(req: Request) {
   const sourceIdMap: Record<string, string[]> = {
     bizinfo:  bizinfoItems.map(parseBizinfoItem).map(p => p.external_id),
     datagokr: datagokrItems.map(parseDataGoKrItem).map(p => p.external_id),
-    gov24:    gov24Items.map(parseGov24Item).map(p => p.external_id),
     kstartup: kstartupItems.map(parseKStartupItem).map(p => p.external_id),
     seoul:    localGovData.programs.filter(p => p.source === 'seoul').map(p => p.external_id),
     gyeonggi: localGovData.programs.filter(p => p.source === 'gyeonggi').map(p => p.external_id),
@@ -249,7 +236,7 @@ export async function POST(req: Request) {
   console.log(
     `[cron/sync-programs] ` +
     `bizinfo=${bizinfoItems.length} datagokr=${datagokrItems.length} ` +
-    `gov24=${gov24Items.length} kstartup=${kstartupItems.length} ` +
+    `kstartup=${kstartupItems.length} ` +
     `seoul=${localGovData.counts.seoul ?? 0} gyeonggi=${localGovData.counts.gyeonggi ?? 0} busan=${localGovData.counts.busan ?? 0} ` +
     `upserted=${upserted} closed=${closed} recurringLinked=${recurringLinked} expectedPromoted=${expectedPromoted}`,
   );
@@ -259,7 +246,6 @@ export async function POST(req: Request) {
     sources: {
       bizinfo:        bizinfoItems.length,
       datagokr:       datagokrItems.length,
-      gov24:          gov24Items.length,
       kstartup:       kstartupItems.length,
       seoul:          localGovData.counts.seoul    ?? 0,
       gyeonggi:       localGovData.counts.gyeonggi ?? 0,
