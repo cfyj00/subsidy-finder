@@ -153,6 +153,7 @@ export async function POST(req: Request) {
     seoul:    localGovData.programs.filter(p => p.source === 'seoul').map(p => p.external_id),
     gyeonggi: localGovData.programs.filter(p => p.source === 'gyeonggi').map(p => p.external_id),
     busan:    localGovData.programs.filter(p => p.source === 'busan').map(p => p.external_id),
+    chungbuk: localGovData.programs.filter(p => p.source === 'chungbuk').map(p => p.external_id),
   };
 
   for (const [source, ids] of Object.entries(sourceIdMap)) {
@@ -250,7 +251,7 @@ export async function POST(req: Request) {
     `[cron/sync-programs] ` +
     `bizinfo=${bizinfoItems.length} datagokr=${datagokrItems.length} ` +
     `gov24=${gov24Items.length} kstartup=${kstartupItems.length} ` +
-    `seoul=${localGovData.counts.seoul ?? 0} gyeonggi=${localGovData.counts.gyeonggi ?? 0} busan=${localGovData.counts.busan ?? 0} ` +
+    `seoul=${localGovData.counts.seoul ?? 0} gyeonggi=${localGovData.counts.gyeonggi ?? 0} busan=${localGovData.counts.busan ?? 0} chungbuk=${localGovData.counts.chungbuk ?? 0} ` +
     `upserted=${upserted} closed=${closed} recurringLinked=${recurringLinked} expectedPromoted=${expectedPromoted}`,
   );
 
@@ -264,6 +265,7 @@ export async function POST(req: Request) {
       seoul:          localGovData.counts.seoul    ?? 0,
       gyeonggi:       localGovData.counts.gyeonggi ?? 0,
       busan:          localGovData.counts.busan    ?? 0,
+      chungbuk:       localGovData.counts.chungbuk ?? 0,
     },
     fetched:          totalFetched,
     upserted,

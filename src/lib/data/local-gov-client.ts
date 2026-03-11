@@ -1,18 +1,20 @@
 /**
  * 광역시도 공공데이터 클라이언트
  *
- * 서울특별시, 경기도, 부산광역시 각자 공공데이터 포털에서
+ * 서울특별시, 경기도, 부산광역시, 충청북도 각자 공공데이터 포털에서
  * 기업지원/소상공인/창업 지원사업 공고를 수집합니다.
  *
  * API 키 발급 (각 포털에서 별도 신청):
  *   - 서울:  https://data.seoul.go.kr → 개발자 API → 인증키 발급
  *   - 경기:  https://openapi.gg.go.kr → 회원가입 → API 키 발급
  *   - 부산:  https://www.data.busan.go.kr → 공공데이터 활용신청
+ *   - 충북:  https://www.data.cb.go.kr → 회원가입 → 활용신청
  *
  * 환경변수:
- *   SEOUL_API_KEY   서울 열린데이터광장 인증키
+ *   SEOUL_API_KEY    서울 열린데이터광장 인증키
  *   GYEONGGI_API_KEY 경기도 공공데이터 인증키
- *   BUSAN_API_KEY   부산광역시 공공데이터 인증키
+ *   BUSAN_API_KEY    부산광역시 공공데이터 인증키
+ *   CHUNGBUK_API_KEY 충청북도 공공데이터 인증키
  *
  * ※ 키가 없는 시도는 조용히 건너뜁니다 (graceful skip).
  */
@@ -283,6 +285,112 @@ async function fetchBusanPrograms(): Promise<ParsedProgram[]> {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
+// 충청북도  (충청북도 공공데이터포털)
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * 충청북도 기업지원 사업공고
+ *
+ * 충청북도 공공데이터포털: https://www.data.cb.go.kr
+ * → 회원가입 후 "중소기업지원사업" 또는 "기업지원공고" 데이터 활용신청
+ * → 발급된 API 키를 CHUNGBUK_API_KEY 환경변수에 입력
+ *
+ * 충북은 data.go.kr 공동 포털도 활용:
+ *   https://apis.data.go.kr/6430000/ChungbukBizSuptService/getBizSuptList
+ * (기관코드 6430000 = 충청북도)
+ */
+
+interface ChungbukBizItem {
+  BIZ_ID?:        string;   // 사업 ID
+  BIZ_NM:         string;   // 사업명
+  JRSD_INSTT_NM?: string;   // 주관기관명
+  SIGUN_NM?:      string;   // 시군명
+  RCRIT_BGNG_DE?: string;   // 접수 시작일
+  RCRIT_END_DE?:  string;   // 접수 마감일
+  BIZ_CN?:        string;   // 사업내용
+  DETAIL_URL?:    string;   // 상세 URL
+  SUPT_AMT?:      string;   // 지원금액
+}
+
+function parseXmlBlock(tag: string, block: string): string {
+  const m = block.match(
+    new RegExp(
+      `<${tag}[^>]*><!\\[CDATA\\[([\\s\\S]*?)\\]\\]><\\/${tag}>|<${tag}[^>]*>([^<]*)<\\/${tag}>`,
+    ),
+  );
+  return m ? (m[1] ?? m[2] ?? '').trim() : '';
+}
+
+async function fetchChungbukPrograms(): Promise<ParsedProgram[]> {
+  const key = process.env.CHUNGBUK_API_KEY;
+  if (!key) return [];
+
+  const results: ParsedProgram[] = [];
+
+  try {
+    // data.go.kr 경유 충청북도 기업지원 API
+    const params = new URLSearchParams({
+      serviceKey: key,
+      pageNo:     '1',
+      numOfRows:  '100',
+    });
+    const url = `https://apis.data.go.kr/6430000/ChungbukBizSuptService/getBizSuptList?${params.toString()}`;
+    const res = await fetch(url, {
+      headers: { Accept: 'application/xml, text/xml' },
+      next:    { revalidate: 0 },
+    });
+    if (!res.ok) return [];
+
+    const text = await res.text();
+
+    // 오류 코드 확인
+    const errCode = text.match(/<resultCode[^>]*>([^<]+)<\/resultCode>/)?.[1]?.trim();
+    if (errCode && errCode !== '00' && errCode !== '0000') return [];
+
+    // <item> 블록 파싱
+    for (const match of text.matchAll(/<item>([\s\S]*?)<\/item>/g)) {
+      const block = match[1];
+      const title = parseXmlBlock('BIZ_NM', block);
+      if (!title) continue;
+
+      const start  = toIsoDate(parseXmlBlock('RCRIT_BGNG_DE', block));
+      const end    = toIsoDate(parseXmlBlock('RCRIT_END_DE',  block));
+      const status = calcStatus(start, end);
+      if (status === 'closed') continue;
+
+      const bizId   = parseXmlBlock('BIZ_ID',       block);
+      const sigunNm = parseXmlBlock('SIGUN_NM',     block);
+      const content = parseXmlBlock('BIZ_CN',       block);
+      const org     = parseXmlBlock('JRSD_INSTT_NM', block);
+      const url2    = parseXmlBlock('DETAIL_URL',    block);
+      const text2   = `${title} ${content}`;
+      const region  = sigunNm ? `충청북도 ${sigunNm}` : '충청북도';
+
+      results.push({
+        external_id:       `chungbuk_${bizId || title.slice(0, 20).replace(/\s/g, '_')}`,
+        source:            'chungbuk',
+        title,
+        managing_org:      org || '충청북도',
+        category:          guessCategory(text2),
+        support_type:      null,
+        target_regions:    [region],
+        application_start: start,
+        application_end:   end,
+        status,
+        description:       content || null,
+        detail_url:        url2 || 'https://www.cb.go.kr',
+        raw_data:          { BIZ_ID: bizId, BIZ_NM: title, JRSD_INSTT_NM: org } as Record<string, unknown>,
+        last_synced_at:    new Date().toISOString(),
+      });
+    }
+  } catch (e) {
+    console.warn('[local-gov] 충북 API 오류:', e);
+  }
+
+  return results;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
 // 통합 진입점
 // ══════════════════════════════════════════════════════════════════════════════
 
@@ -293,14 +401,15 @@ export interface LocalGovResult {
 }
 
 /**
- * 서울 + 경기 + 부산 병렬 수집
+ * 서울 + 경기 + 부산 + 충북 병렬 수집
  * 키가 없는 시도는 조용히 빈 배열 반환 (graceful skip)
  */
 export async function fetchAllLocalGovPrograms(): Promise<LocalGovResult> {
-  const [seoulResult, gyeonggiResult, busanResult] = await Promise.allSettled([
+  const [seoulResult, gyeonggiResult, busanResult, chungbukResult] = await Promise.allSettled([
     fetchSeoulPrograms(),
     fetchGyeonggiPrograms(),
     fetchBusanPrograms(),
+    fetchChungbukPrograms(),
   ]);
 
   const programs: ParsedProgram[] = [];
@@ -329,6 +438,14 @@ export async function fetchAllLocalGovPrograms(): Promise<LocalGovResult> {
   } else {
     errors.push(`부산: ${busanResult.reason}`);
     counts.busan = 0;
+  }
+
+  if (chungbukResult.status === 'fulfilled') {
+    programs.push(...chungbukResult.value);
+    counts.chungbuk = chungbukResult.value.length;
+  } else {
+    errors.push(`충북: ${chungbukResult.reason}`);
+    counts.chungbuk = 0;
   }
 
   // external_id 기준 중복 제거
