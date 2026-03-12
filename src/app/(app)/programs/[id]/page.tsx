@@ -473,11 +473,11 @@ export default function ProgramDetailPage() {
         {/* ── Description ──────────────────────────────────────────────────────── */}
         {program.description && (() => {
           const cleanDesc = stripHtml(program.description) ?? '';
-          const isLong = cleanDesc.length > 250;
+          const isLong = cleanDesc.length > 120;
           return (
             <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl p-5 mb-4">
               <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-3 uppercase tracking-wide">사업 개요</h2>
-              <p className={`text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-line ${!descExpanded && isLong ? 'line-clamp-5' : ''}`}>
+              <p className={`text-sm text-gray-700 dark:text-gray-300 leading-relaxed ${!descExpanded && isLong ? 'line-clamp-5' : 'whitespace-pre-line'}`}>
                 {cleanDesc}
               </p>
               {isLong && (

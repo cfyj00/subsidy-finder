@@ -54,6 +54,15 @@ function getApiKey(): string {
   return process.env.BIZINFO_API_KEY ?? '';
 }
 
+// ─── 개인 이름 감지 (jrsdInsttNm에 기관명 대신 개인명이 들어오는 경우) ──────
+
+const KOREAN_SURNAMES = '김이박최정강조윤장임한오서신권황안송유홍전고문양손배백노하허심도우남엄채원천방공현함변염석선설마길진봉온형민계';
+function isPersonName(name: string | undefined | null): boolean {
+  if (!name) return false;
+  const t = name.trim();
+  return /^[가-힣]{2,4}$/.test(t) && KOREAN_SURNAMES.includes(t[0]);
+}
+
 // ─── 날짜 파싱 (YYYYMMDD → ISO) ────────────────────────────────────────────
 
 export function parseKorDate(yyyymmdd: string | undefined | null): string | null {
@@ -301,11 +310,16 @@ export function parseBizinfoItem(item: BizinfoListItem): ParsedProgram {
   const start = reqst.start ?? parseKorDate(item.pbancBgngYmd);
   const end   = reqst.end   ?? parseKorDate(item.pbancEndYmd);
 
+  // jrsdInsttNm이 개인 이름이면 bsnsChrgDeptNm(담당부서)을 기관명으로 사용
+  const managingOrg = isPersonName(item.jrsdInsttNm)
+    ? (item.bsnsChrgDeptNm || item.jrsdInsttNm || null)
+    : (item.jrsdInsttNm || null);
+
   return {
     external_id:       `bizinfo_${item.pblancId}`,
     source:            'bizinfo',
     title:             item.pblancNm,
-    managing_org:      item.jrsdInsttNm || null,
+    managing_org:      managingOrg,
     category:          guessCategory(item),
     support_type:      null,
     target_regions:    regions,
