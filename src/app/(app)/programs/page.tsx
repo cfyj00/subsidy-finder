@@ -16,6 +16,7 @@ import {
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { matchesSearch } from '@/lib/search-keywords';
+import { stripHtml } from '@/lib/data/utils';
 
 export default function ProgramsPage() {
   const { profile } = useProfile();
@@ -156,6 +157,13 @@ export default function ProgramsPage() {
   if (filterMyBusiness && businessProfile) {
     filteredPrograms = [...filteredPrograms].sort((a, b) => (getMatchScore(b.id) ?? 0) - (getMatchScore(a.id) ?? 0));
   }
+
+  const KOREAN_SURNAMES = '김이박최정강조윤장임한오서신권황안송유홍전고문양손배백노하허심도우남엄채원천방공현함변염석선설마길진봉온형민계';
+  const isPersonName = (name: string | null | undefined): boolean => {
+    if (!name) return false;
+    const t = name.trim();
+    return /^[가-힣]{2,4}$/.test(t) && KOREAN_SURNAMES.includes(t[0]);
+  };
 
   const statusLabel = (s: string) => {
     switch (s) {
@@ -405,9 +413,13 @@ export default function ProgramsPage() {
                         {program.title}
                       </h3>
                     </Link>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{program.managing_org}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      {isPersonName(program.managing_org)
+                        ? `${program.implementing_org ? program.implementing_org + ' · ' : ''}작성자: ${program.managing_org}`
+                        : program.managing_org}
+                    </p>
                     {program.description && (
-                      <p className="text-sm text-gray-600 dark:text-gray-300 mt-1.5 line-clamp-2">{program.description}</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-300 mt-1.5 line-clamp-2">{stripHtml(program.description)}</p>
                     )}
                     <div className="flex flex-wrap items-center gap-3 mt-2.5 text-xs text-gray-500 dark:text-gray-400">
                       {program.funding_amount_max && (

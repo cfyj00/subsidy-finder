@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { getSupabaseBrowser } from '@/lib/supabase-browser';
 import { calculateMatch, getMatchLabel } from '@/lib/matching-engine';
+import { stripHtml } from '@/lib/data/utils';
 import { CATEGORY_COLORS } from '@/lib/constants';
 import type { Program, BusinessProfile, UserProgramMatch } from '@/types/database';
 import {
@@ -121,6 +122,7 @@ export default function ProgramDetailPage() {
   const [addedToTracker, setAddedToTracker] = useState(false);
   const [showPrompts, setShowPrompts] = useState(false);
   const [copiedPromptId, setCopiedPromptId] = useState<string | null>(null);
+  const [descExpanded, setDescExpanded] = useState(false);
 
   const loadData = useCallback(async () => {
     const supabase = getSupabaseBrowser();
@@ -183,6 +185,13 @@ export default function ProgramDetailPage() {
       setMatch(newMatch as UserProgramMatch | null);
     }
     setBookmarkLoading(false);
+  };
+
+  const KOREAN_SURNAMES = '김이박최정강조윤장임한오서신권황안송유홍전고문양손배백노하허심도우남엄채원천방공현함변염석선설마길진봉온형민계';
+  const isPersonName = (name: string | null | undefined): boolean => {
+    if (!name) return false;
+    const t = name.trim();
+    return /^[가-힣]{2,4}$/.test(t) && KOREAN_SURNAMES.includes(t[0]);
   };
 
   const statusBadge = (s: string) => {
@@ -260,9 +269,22 @@ export default function ProgramDetailPage() {
               <h1 className="text-xl font-bold text-gray-900 dark:text-white leading-tight mb-2">{program.title}</h1>
 
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-500 dark:text-gray-400">
-                <span className="flex items-center gap-1.5"><Building2 size={13} />{program.managing_org}</span>
-                {program.implementing_org && program.implementing_org !== program.managing_org && (
-                  <span className="flex items-center gap-1.5">· {program.implementing_org}</span>
+                {isPersonName(program.managing_org) ? (
+                  <>
+                    {program.implementing_org && (
+                      <span className="flex items-center gap-1.5"><Building2 size={13} />{program.implementing_org}</span>
+                    )}
+                    <span className="flex items-center gap-1.5">작성자: {program.managing_org}</span>
+                  </>
+                ) : (
+                  <>
+                    {program.managing_org && (
+                      <span className="flex items-center gap-1.5"><Building2 size={13} />{program.managing_org}</span>
+                    )}
+                    {program.implementing_org && program.implementing_org !== program.managing_org && (
+                      <span className="flex items-center gap-1.5">· {program.implementing_org}</span>
+                    )}
+                  </>
                 )}
               </div>
             </div>
@@ -449,12 +471,27 @@ export default function ProgramDetailPage() {
         </div>
 
         {/* ── Description ──────────────────────────────────────────────────────── */}
-        {program.description && (
-          <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl p-5 mb-4">
-            <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-3 uppercase tracking-wide">사업 개요</h2>
-            <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">{program.description}</p>
-          </div>
-        )}
+        {program.description && (() => {
+          const cleanDesc = stripHtml(program.description) ?? '';
+          const isLong = cleanDesc.length > 250;
+          return (
+            <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl p-5 mb-4">
+              <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-3 uppercase tracking-wide">사업 개요</h2>
+              <p className={`text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-line ${!descExpanded && isLong ? 'line-clamp-5' : ''}`}>
+                {cleanDesc}
+              </p>
+              {isLong && (
+                <button
+                  onClick={() => setDescExpanded(v => !v)}
+                  className="mt-2 flex items-center gap-1 text-xs text-indigo-600 dark:text-indigo-400 hover:underline"
+                >
+                  {descExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                  {descExpanded ? '접기' : '더보기'}
+                </button>
+              )}
+            </div>
+          );
+        })()}
 
         {/* ── Eligibility ───────────────────────────────────────────────────────── */}
         {program.eligibility_summary && (
