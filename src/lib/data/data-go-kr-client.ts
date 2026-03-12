@@ -185,7 +185,7 @@ export function parseDataGoKrItem(item: DataGoKrItem): ParsedProgram {
     external_id:       `datagokr_${item.itemId}`,
     source:            'datagokr',
     title:             item.title,
-    managing_org:      item.writerName || null,
+    managing_org:      '중소벤처기업부',   // writerName은 개인 이름 → 소스 기관명으로 고정
     category:          guessCategory(item.title, item.dataContents),
     support_type:      null,
     target_regions:    [],

@@ -149,7 +149,7 @@ export async function POST(req: Request) {
       .select('id')
       .eq('source', source)
       .in('status', ['open', 'upcoming'])
-      .not('external_id', 'in', `(${ids.join(',')})`);
+      .not('external_id', 'in', `(${ids.map(id => `'${id}'`).join(',')})`);
 
     if (toClose && toClose.length > 0) {
       await admin
