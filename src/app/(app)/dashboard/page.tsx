@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { getSupabaseBrowser } from '@/lib/supabase-browser';
 import { useProfile } from '@/lib/profile-context';
+import { useBusinessProfile } from '@/lib/business-profile-context';
 import { calculateMatch, getMatchLabel } from '@/lib/matching-engine';
 import { CATEGORY_COLORS, DAILY_TIPS } from '@/lib/constants';
 import type { Program, BusinessProfile, UserProgramMatch } from '@/types/database';
@@ -20,10 +21,18 @@ interface TopMatch {
   match: { score: number; label: string; color: string; reasons: string[] };
 }
 
+// 개인명 감지 (managing_org 표시용)
+const KOREAN_SURNAMES = '김이박최정강조윤장임한오서신권황안송유홍전고문양손배백노하허심도우남엄채원천방공현함변염석선설마길진봉온형민계';
+function isPersonName(name: string | null | undefined): boolean {
+  if (!name) return false;
+  const t = name.trim();
+  return /^[가-힣]{2,4}$/.test(t) && KOREAN_SURNAMES.includes(t[0]);
+}
+
 export default function DashboardPage() {
   const router = useRouter();
   const { profile, loading: profileLoading } = useProfile();
-  const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
+  const { activeProfile: businessProfile, loading: bpLoading } = useBusinessProfile();
   const [topMatches, setTopMatches] = useState<TopMatch[]>([]);
   const [urgentPrograms, setUrgentPrograms] = useState<Program[]>([]);
   const [allPrograms, setAllPrograms] = useState<Program[]>([]);
@@ -31,17 +40,14 @@ export default function DashboardPage() {
   const [matchingLoading, setMatchingLoading] = useState(false);
   const [tip] = useState(() => DAILY_TIPS[Math.floor(Math.random() * DAILY_TIPS.length)]);
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (bp: BusinessProfile | null) => {
     const supabase = getSupabaseBrowser();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    const { data: progs } = await supabase
+      .from('programs')
+      .select('*')
+      .in('status', ['open', 'upcoming'])
+      .order('is_featured', { ascending: false });
 
-    const [{ data: bp }, { data: progs }] = await Promise.all([
-      supabase.from('business_profiles').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
-      supabase.from('programs').select('*').in('status', ['open', 'upcoming']).order('is_featured', { ascending: false }),
-    ]);
-
-    setBusinessProfile(bp as BusinessProfile | null);
     const programs = (progs || []) as Program[];
     setAllPrograms(programs);
 
@@ -68,8 +74,8 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    if (!profileLoading) loadData();
-  }, [profileLoading, loadData]);
+    if (!profileLoading && !bpLoading) loadData(businessProfile);
+  }, [profileLoading, bpLoading, businessProfile, loadData]);
 
   const runMatching = async () => {
     if (!businessProfile || allPrograms.length === 0) return;
@@ -91,7 +97,7 @@ export default function DashboardPage() {
     }
 
     setMatchingLoading(false);
-    loadData();
+    loadData(businessProfile);
   };
 
   // Profile completion
@@ -113,7 +119,7 @@ export default function DashboardPage() {
 
   const completion = getProfileCompletion();
 
-  if (loading || profileLoading) {
+  if (loading || profileLoading || bpLoading) {
     return (
       <div className="flex items-center justify-center py-32">
         <Loader2 size={32} className="animate-spin text-indigo-400" />
@@ -246,7 +252,9 @@ export default function DashboardPage() {
                       <div className="text-sm font-medium text-gray-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors line-clamp-1">
                         {program.title}
                       </div>
-                      <div className="text-xs text-gray-400 mt-0.5">{program.managing_org}</div>
+                      <div className="text-xs text-gray-400 mt-0.5">
+                        {isPersonName(program.managing_org) ? `작성자: ${program.managing_org}` : program.managing_org}
+                      </div>
                     </div>
                     <div className="text-right flex-shrink-0">
                       <div className={`text-lg font-bold ${match.color}`}>{match.score}</div>

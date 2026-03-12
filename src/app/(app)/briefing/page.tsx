@@ -15,6 +15,14 @@ import { DAILY_TIPS } from '@/lib/constants';
 import { format, isToday, isTomorrow } from 'date-fns';
 import { ko } from 'date-fns/locale';
 
+// 개인명 감지
+const KOREAN_SURNAMES = '김이박최정강조윤장임한오서신권황안송유홍전고문양손배백노하허심도우남엄채원천방공현함변염석선설마길진봉온형민계';
+function isPersonName(name: string | null | undefined): boolean {
+  if (!name) return false;
+  const t = name.trim();
+  return /^[가-힣]{2,4}$/.test(t) && KOREAN_SURNAMES.includes(t[0]);
+}
+
 // 마감 D-day 포맷
 function dday(deadline: string | null): { label: string; urgent: boolean } | null {
   if (!deadline) return null;
@@ -260,7 +268,9 @@ export default function BriefingPage() {
                 <Link key={p.id} href={`/programs/${p.id}`} className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-slate-800 rounded-xl hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors">
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{p.title}</p>
-                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{p.managing_org}</p>
+                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+                      {isPersonName(p.managing_org) ? `작성자: ${p.managing_org}` : p.managing_org}
+                    </p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     {score > 0 && (
@@ -303,7 +313,9 @@ export default function BriefingPage() {
                 <Link key={p.id} href={`/programs/${p.id}`} className="flex items-center justify-between gap-3 p-3 bg-white dark:bg-slate-800 rounded-xl hover:bg-violet-50 dark:hover:bg-violet-900/20 transition-colors">
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{p.title}</p>
-                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{p.managing_org}</p>
+                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+                      {isPersonName(p.managing_org) ? `작성자: ${p.managing_org}` : p.managing_org}
+                    </p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <span className="text-xs bg-violet-100 dark:bg-violet-900/40 text-violet-600 dark:text-violet-400 px-2 py-0.5 rounded-full font-medium">

@@ -16,6 +16,14 @@ import {
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 
+// 개인명 감지
+const KOREAN_SURNAMES = '김이박최정강조윤장임한오서신권황안송유홍전고문양손배백노하허심도우남엄채원천방공현함변염석선설마길진봉온형민계';
+function isPersonName(name: string | null | undefined): boolean {
+  if (!name) return false;
+  const t = name.trim();
+  return /^[가-힣]{2,4}$/.test(t) && KOREAN_SURNAMES.includes(t[0]);
+}
+
 // ── 지원 단계 정의 ────────────────────────────────────────────────────────────
 interface Step {
   id: string;
@@ -190,7 +198,11 @@ export default function ApplyPage() {
         <p className="text-indigo-200 text-xs mb-1.5 font-medium">지원 여정 가이드</p>
         <h1 className="font-bold text-lg leading-snug mb-2">{program.title}</h1>
         <div className="flex flex-wrap gap-3 text-sm">
-          <span className="text-indigo-100">{program.managing_org}</span>
+          {program.managing_org && (
+            <span className="text-indigo-100">
+              {isPersonName(program.managing_org) ? `작성자: ${program.managing_org}` : program.managing_org}
+            </span>
+          )}
           {program.funding_amount_max && (
             <span className="bg-white/20 px-2.5 py-0.5 rounded-full text-xs font-medium">
               최대 {program.funding_amount_max.toLocaleString()}만원
