@@ -11,6 +11,8 @@
  * 기본 엔드포인트: https://www.bizinfo.go.kr/uss/rss/bizinfoApi.do
  */
 
+import { stripHtml } from './utils';
+
 // ─── 응답 타입 ──────────────────────────────────────────────────────────────
 
 export interface BizinfoListItem {
@@ -18,9 +20,11 @@ export interface BizinfoListItem {
   pblancNm: string;           // 공고명 (사업명)
   jrsdInsttNm: string;        // 주관기관명
   creatPnttm: string;         // 생성 시점 (YYYYMMDDHHMMSS)
-  pbancBgngYmd: string;       // 공고 시작일 (YYYYMMDD)
-  pbancEndYmd: string;        // 공고 종료일 (YYYYMMDD)
-  pgmSttusNm: string;         // 상태: '접수중' | '접수예정' | '접수마감'
+  pbancBgngYmd: string;       // 공고 시작일 (YYYYMMDD) - 실제 API에선 빈 문자열
+  pbancEndYmd: string;        // 공고 종료일 (YYYYMMDD) - 실제 API에선 빈 문자열
+  pgmSttusNm: string;         // 상태 (실제 API 응답엔 없음 → 빈 문자열)
+  reqstDt?: string;           // 접수 기간 '2026-02-24 ~ 2026-03-16' 형태
+  reqstBeginEndDe?: string;   // reqstDt와 동일한 날짜 범위 필드
   bsnsChrgDeptNm?: string;    // 담당 부서
   ctpvNm?: string;            // 시도명
   detlUrl?: string;           // 상세 URL
@@ -62,20 +66,13 @@ export function parseKorDate(yyyymmdd: string | undefined | null): string | null
   return isNaN(date.getTime()) ? null : iso;
 }
 
-// ─── HTML 태그 제거 ────────────────────────────────────────────────────────
+// ─── reqstDt 파싱 '2026-02-24 ~ 2026-03-16' → {start, end} ───────────────
 
-function stripHtml(html: string | null | undefined): string | null {
-  if (!html) return null;
-  return html
-    .replace(/<[^>]+>/g, ' ')           // 태그 제거
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#[0-9]+;/g, '')
-    .replace(/\s{2,}/g, ' ')            // 연속 공백 정리
-    .trim() || null;
+function parseReqstDt(reqstDt: string | undefined): { start: string | null; end: string | null } {
+  if (!reqstDt) return { start: null, end: null };
+  const m = reqstDt.match(/(\d{4}-\d{2}-\d{2})\s*~\s*(\d{4}-\d{2}-\d{2})/);
+  if (!m) return { start: null, end: null };
+  return { start: m[1], end: m[2] };
 }
 
 // ─── 상태 → DB status 매핑 ────────────────────────────────────────────────
@@ -180,11 +177,13 @@ async function fetchPage(
         pbancBgngYmd:   get('pbancBgngYmd'),
         pbancEndYmd:    get('pbancEndYmd'),
         pgmSttusNm:     get('pgmSttusNm'),
+        reqstDt:        get('reqstDt') || get('reqstBeginEndDe') || undefined,
+        reqstBeginEndDe: get('reqstBeginEndDe') || undefined,
         bsnsChrgDeptNm: get('bsnsChrgDeptNm') || undefined,
         ctpvNm:         get('ctpvNm') || undefined,
-        detlUrl:        get('detlUrl') || get('link') || undefined,
+        detlUrl:        get('detlUrl') || get('pblancUrl') || get('link') || undefined,
         ntcnNm:         get('ntcnNm') || undefined,
-        ctgryNm:        get('ctgryNm') || undefined,
+        ctgryNm:        get('ctgryNm') || get('lcategory') || get('pldirSportRealmLclasCodeNm') || undefined,
         bsnsSumryCn:    get('bsnsSumryCn') || get('description') || undefined,
       });
     }
@@ -297,8 +296,10 @@ export function parseBizinfoItem(item: BizinfoListItem): ParsedProgram {
     });
   }
 
-  const start = parseKorDate(item.pbancBgngYmd);
-  const end   = parseKorDate(item.pbancEndYmd);
+  // reqstDt 우선, 없으면 pbancBgngYmd/pbancEndYmd fallback
+  const reqst = parseReqstDt(item.reqstDt ?? item.reqstBeginEndDe);
+  const start = reqst.start ?? parseKorDate(item.pbancBgngYmd);
+  const end   = reqst.end   ?? parseKorDate(item.pbancEndYmd);
 
   return {
     external_id:       `bizinfo_${item.pblancId}`,

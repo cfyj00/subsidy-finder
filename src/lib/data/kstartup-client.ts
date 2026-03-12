@@ -15,6 +15,7 @@
  */
 
 import type { ParsedProgram } from './bizinfo-client';
+import { stripHtml } from './utils';
 
 // ── 타입 ────────────────────────────────────────────────────────────────────
 
@@ -230,7 +231,7 @@ export function parseKStartupItem(item: KStartupItem): ParsedProgram {
     application_start: start,
     application_end:   end,
     status:            calcStatus(item.rcrt_prgs_yn, start, end),
-    description:       item.aply_trgt_ctnt || null,
+    description:       stripHtml(item.aply_trgt_ctnt),
     detail_url:        item.pbanc_url || `https://www.k-startup.go.kr/web/contents/bizpbanc-ongoing.do`,
     raw_data:          item as unknown as Record<string, unknown>,
     last_synced_at:    new Date().toISOString(),

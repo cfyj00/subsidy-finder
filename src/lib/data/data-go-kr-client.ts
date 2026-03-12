@@ -11,6 +11,7 @@
  */
 
 import type { ParsedProgram } from './bizinfo-client';
+import { stripHtml } from './utils';
 
 // ── 타입 ───────────────────────────────────────────────────────────────────
 
@@ -191,7 +192,7 @@ export function parseDataGoKrItem(item: DataGoKrItem): ParsedProgram {
     application_start: start,
     application_end:   end,
     status:            calcStatus(start, end),
-    description:       item.dataContents || null,
+    description:       stripHtml(item.dataContents),
     detail_url:        item.viewUrl || null,
     raw_data:          item as unknown as Record<string, unknown>,
     last_synced_at:    new Date().toISOString(),

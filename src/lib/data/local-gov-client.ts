@@ -21,6 +21,7 @@
  */
 
 import type { ParsedProgram } from './bizinfo-client';
+import { stripHtml } from './utils';
 
 // ── 공통 유틸 ────────────────────────────────────────────────────────────────
 
@@ -106,7 +107,7 @@ async function fetchSeoulPrograms(): Promise<ParsedProgram[]> {
         application_start: start,
         application_end:   end,
         status,
-        description:       item.BIZ_CN || null,
+        description:       stripHtml(item.BIZ_CN),
         detail_url:        item.APPLY_URL || 'https://biz.seoul.go.kr',
         raw_data:          item as unknown as Record<string, unknown>,
         last_synced_at:    new Date().toISOString(),
@@ -168,7 +169,7 @@ async function fetchGyeonggiPrograms(): Promise<ParsedProgram[]> {
         application_start: start,
         application_end:   end,
         status,
-        description:       item.SFRND_DETAIL_CN || null,
+        description:       stripHtml(item.SFRND_DETAIL_CN),
         detail_url:        item.LINK_URL || 'https://www.gg.go.kr',
         raw_data:          item as unknown as Record<string, unknown>,
         last_synced_at:    new Date().toISOString(),
@@ -228,7 +229,7 @@ async function fetchBusanPrograms(): Promise<ParsedProgram[]> {
         application_start: start,
         application_end:   end,
         status,
-        description:       item.BIZ_SUMRY_CN || null,
+        description:       stripHtml(item.BIZ_SUMRY_CN),
         detail_url:        item.DETAIL_URL || 'https://www.busan.go.kr',
         raw_data:          item as unknown as Record<string, unknown>,
         last_synced_at:    new Date().toISOString(),
