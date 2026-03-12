@@ -5,7 +5,8 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { getSupabaseBrowser } from '@/lib/supabase-browser';
 import { calculateMatch } from '@/lib/matching-engine';
-import type { Program, BusinessProfile, UserApplication, ApplicationStatus } from '@/types/database';
+import { useBusinessProfile } from '@/lib/business-profile-context';
+import type { Program, UserApplication, ApplicationStatus } from '@/types/database';
 import {
   ArrowLeft, CheckCircle2, Circle, ChevronRight,
   ExternalLink, MessageSquare, FileText, Loader2,
@@ -104,8 +105,8 @@ function ProgressBar({ current, total }: { current: number; total: number }) {
 export default function ApplyPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const { activeProfile: profile } = useBusinessProfile();
   const [program, setProgram] = useState<Program | null>(null);
-  const [profile, setProfile] = useState<BusinessProfile | null>(null);
   const [application, setApplication] = useState<UserApplication | null>(null);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
@@ -116,14 +117,12 @@ export default function ApplyPage() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setLoading(false); return; }
 
-    const [{ data: prog }, { data: bp }, { data: app }] = await Promise.all([
+    const [{ data: prog }, { data: app }] = await Promise.all([
       supabase.from('programs').select('*').eq('id', id).single(),
-      supabase.from('business_profiles').select('*').eq('user_id', user.id).single(),
       supabase.from('user_applications').select('*').eq('user_id', user.id).eq('program_id', id).maybeSingle(),
     ]);
 
     setProgram(prog as Program | null);
-    setProfile(bp as BusinessProfile | null);
     setApplication(app as UserApplication | null);
     if (app) setAdded(true);
     setLoading(false);

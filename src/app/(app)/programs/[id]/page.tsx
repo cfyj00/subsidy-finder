@@ -6,8 +6,9 @@ import Link from 'next/link';
 import { getSupabaseBrowser } from '@/lib/supabase-browser';
 import { calculateMatch, getMatchLabel } from '@/lib/matching-engine';
 import { stripHtml } from '@/lib/data/utils';
+import { useBusinessProfile } from '@/lib/business-profile-context';
 import { CATEGORY_COLORS } from '@/lib/constants';
-import type { Program, BusinessProfile, UserProgramMatch } from '@/types/database';
+import type { Program, UserProgramMatch } from '@/types/database';
 import {
   ArrowLeft, Bookmark, BookmarkCheck, ExternalLink, CheckCircle,
   XCircle, Calendar, Building2, MapPin, Users, DollarSign, Clock,
@@ -114,8 +115,8 @@ export default function ProgramDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const [program, setProgram] = useState<Program | null>(null);
-  const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
   const [match, setMatch] = useState<UserProgramMatch | null>(null);
+  const { activeProfile: businessProfile, loading: profileLoading } = useBusinessProfile();
   const [loading, setLoading] = useState(true);
   const [bookmarkLoading, setBookmarkLoading] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -129,15 +130,13 @@ export default function ProgramDetailPage() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    const [{ data: prog }, { data: bp }, { data: matchData }, { data: appData }] = await Promise.all([
+    const [{ data: prog }, { data: matchData }, { data: appData }] = await Promise.all([
       supabase.from('programs').select('*').eq('id', id).single(),
-      supabase.from('business_profiles').select('*').eq('user_id', user.id).single(),
       supabase.from('user_program_matches').select('*').eq('user_id', user.id).eq('program_id', id).maybeSingle(),
       supabase.from('user_applications').select('id').eq('user_id', user.id).eq('program_id', id).maybeSingle(),
     ]);
 
     setProgram(prog as Program | null);
-    setBusinessProfile(bp as BusinessProfile | null);
     setMatch(matchData as UserProgramMatch | null);
     if (appData) setAddedToTracker(true);
     setLoading(false);
@@ -452,6 +451,10 @@ export default function ProgramDetailPage() {
                   <Link href="/profile" className="text-indigo-600 dark:text-indigo-400 hover:underline">프로필을 등록</Link>하면 정확한 매칭 분석을 받을 수 있습니다.
                 </p>
               )}
+            </div>
+          ) : profileLoading ? (
+            <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl p-5 flex items-center justify-center">
+              <Loader2 size={20} className="animate-spin text-indigo-400" />
             </div>
           ) : !businessProfile ? (
             <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-2xl p-5 flex flex-col items-center justify-center text-center gap-3">

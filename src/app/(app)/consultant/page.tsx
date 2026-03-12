@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { getSupabaseBrowser } from '@/lib/supabase-browser';
 import { calculateMatch } from '@/lib/matching-engine';
+import { useBusinessProfile } from '@/lib/business-profile-context';
 import {
   generateConsultingPrompt,
   generateSingleProgramPrompt,
@@ -375,7 +376,7 @@ function ConsultantContent() {
   const qParam = searchParams.get('q');
   const modeParam = searchParams.get('mode');
 
-  const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
+  const { activeProfile: businessProfile, loading: profileLoading } = useBusinessProfile();
   const [topMatches, setTopMatches] = useState<MatchInfo[]>([]);
   const [singleProgram, setSingleProgram] = useState<Program | null>(null);
   const [singleMatchInfo, setSingleMatchInfo] = useState<{
@@ -400,49 +401,42 @@ function ConsultantContent() {
     if (!user) { setLoading(false); return; }
 
     if (programId) {
-      const [{ data: bp }, { data: prog }] = await Promise.all([
-        supabase.from('business_profiles').select('*').eq('user_id', user.id).single(),
-        supabase.from('programs').select('*').eq('id', programId).single(),
-      ]);
-      const profile = bp as BusinessProfile | null;
+      const { data: prog } = await supabase.from('programs').select('*').eq('id', programId).single();
       const program = prog as Program | null;
-      setBusinessProfile(profile);
       setSingleProgram(program);
 
-      if (profile && program) {
-        const r = calculateMatch(profile, program);
+      if (businessProfile && program) {
+        const r = calculateMatch(businessProfile, program);
         setSingleMatchInfo({ score: r.score, reasons: r.reasons, mismatches: r.mismatches });
-        setConsultingPrompt(generateSingleProgramPrompt(profile, program, {
+        setConsultingPrompt(generateSingleProgramPrompt(businessProfile, program, {
           score: r.score, reasons: r.reasons, mismatches: r.mismatches,
         }));
       } else if (program) {
         setConsultingPrompt(generateSingleProgramPrompt(
-          profile ?? { business_name: '(프로필 미등록)' } as BusinessProfile,
+          businessProfile ?? { business_name: '(프로필 미등록)' } as BusinessProfile,
           program,
         ));
       }
     } else {
-      const [{ data: bp }, { data: progs }] = await Promise.all([
-        supabase.from('business_profiles').select('*').eq('user_id', user.id).single(),
-        supabase.from('programs').select('*').in('status', ['open', 'always']).order('is_featured', { ascending: false }),
-      ]);
-      const profile = bp as BusinessProfile | null;
-      setBusinessProfile(profile);
+      const { data: progs } = await supabase
+        .from('programs').select('*').in('status', ['open', 'always']).order('is_featured', { ascending: false });
 
-      if (profile && progs && progs.length > 0) {
+      if (businessProfile && progs && progs.length > 0) {
         const programs = progs as Program[];
         const scored: MatchInfo[] = programs
-          .map((p) => { const r = calculateMatch(profile, p); return { program: p, score: r.score, reasons: r.reasons }; })
+          .map((p) => { const r = calculateMatch(businessProfile, p); return { program: p, score: r.score, reasons: r.reasons }; })
           .sort((a, b) => b.score - a.score)
           .slice(0, 5);
         setTopMatches(scored);
-        setConsultingPrompt(generateConsultingPrompt(profile, scored));
+        setConsultingPrompt(generateConsultingPrompt(businessProfile, scored));
       }
     }
     setLoading(false);
-  }, [programId]);
+  }, [programId, businessProfile]);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => {
+    if (!profileLoading) loadData();
+  }, [loadData, profileLoading]);
 
   const systemContext = consultingPrompt.slice(0, 2500);
 
@@ -452,7 +446,7 @@ function ConsultantContent() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  if (loading) {
+  if (loading || profileLoading) {
     return (
       <div className="flex items-center justify-center py-32">
         <Loader2 size={32} className="animate-spin text-indigo-400" />

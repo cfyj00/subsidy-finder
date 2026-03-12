@@ -3,7 +3,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Copy, Check, FileText, Search, ClipboardList, MessageSquare, Lightbulb, ChevronDown } from 'lucide-react';
 import { getSupabaseBrowser } from '@/lib/supabase-browser';
-import type { BusinessProfile, Program } from '@/types/database';
+import { useBusinessProfile } from '@/lib/business-profile-context';
+import type { Program } from '@/types/database';
 import {
   generateConsultingPrompt,
   generateSingleProgramPrompt,
@@ -98,7 +99,7 @@ function CopyButton({ text }: { text: string }) {
 
 // ── 메인 페이지 ────────────────────────────────────────────────────────────────
 export default function PromptsPage() {
-  const [profile, setProfile] = useState<BusinessProfile | null>(null);
+  const { activeProfile: profile, loading: profileLoading } = useBusinessProfile();
   const [programs, setPrograms] = useState<Program[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState<Template>(TEMPLATES[0]);
   const [selectedProgramId, setSelectedProgramId] = useState<string>('');
@@ -108,27 +109,21 @@ export default function PromptsPage() {
   useEffect(() => {
     async function load() {
       const supabase = getSupabaseBrowser();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { setLoading(false); return; }
+      const { data: progs } = await supabase
+        .from('programs').select('*').in('status', ['open', 'upcoming']).limit(50);
 
-      const [{ data: prof }, { data: progs }] = await Promise.all([
-        supabase.from('business_profiles').select('*').eq('user_id', user.id).single(),
-        supabase.from('programs').select('*').in('status', ['open', 'upcoming']).limit(50),
-      ]);
-
-      if (prof) setProfile(prof as BusinessProfile);
       if (progs) {
         // 매칭 점수 순으로 정렬
-        const sorted = prof
-          ? (progs as Program[]).sort((a, b) => calculateMatch(prof as BusinessProfile, b).score - calculateMatch(prof as BusinessProfile, a).score)
+        const sorted = profile
+          ? (progs as Program[]).sort((a, b) => calculateMatch(profile, b).score - calculateMatch(profile, a).score)
           : (progs as Program[]);
         setPrograms(sorted);
         if (sorted.length > 0) setSelectedProgramId(sorted[0].id);
       }
       setLoading(false);
     }
-    load();
-  }, []);
+    if (!profileLoading) load();
+  }, [profile, profileLoading]);
 
   const selectedProgram = programs.find(p => p.id === selectedProgramId) ?? null;
 

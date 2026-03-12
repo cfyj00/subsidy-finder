@@ -4,7 +4,8 @@ import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { getSupabaseBrowser } from '@/lib/supabase-browser';
 import { calculateMatch, getMatchLabel } from '@/lib/matching-engine';
-import type { Program, BusinessProfile, UserApplication, UserProgramMatch } from '@/types/database';
+import { useBusinessProfile } from '@/lib/business-profile-context';
+import type { Program, UserApplication, UserProgramMatch } from '@/types/database';
 import {
   ArrowRight, AlertTriangle, CheckCheck, Clock,
   Search, MessageSquare, ClipboardList, Loader2,
@@ -45,7 +46,7 @@ const STATUS_LABEL: Record<UserApplication['status'], string> = {
 };
 
 export default function BriefingPage() {
-  const [profile, setProfile] = useState<BusinessProfile | null>(null);
+  const { activeProfile: profile } = useBusinessProfile();
   const [applications, setApplications] = useState<UserApplication[]>([]);
   const [programs, setPrograms] = useState<Program[]>([]);
   const [matches, setMatches] = useState<UserProgramMatch[]>([]);
@@ -57,15 +58,13 @@ export default function BriefingPage() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setLoading(false); return; }
 
-    const [{ data: bp }, { data: apps }, { data: progs }, { data: matchData }, { data: expectedProgs }] = await Promise.all([
-      supabase.from('business_profiles').select('*').eq('user_id', user.id).single(),
+    const [{ data: apps }, { data: progs }, { data: matchData }, { data: expectedProgs }] = await Promise.all([
       supabase.from('user_applications').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
       supabase.from('programs').select('*').eq('status', 'open').order('is_featured', { ascending: false }).limit(20),
       supabase.from('user_program_matches').select('*').eq('user_id', user.id),
       supabase.from('programs').select('*').eq('status', 'expected').order('typical_open_month', { ascending: true }).limit(10),
     ]);
 
-    setProfile(bp as BusinessProfile | null);
     setApplications((apps ?? []) as UserApplication[]);
     setPrograms((progs ?? []) as Program[]);
     setMatches((matchData ?? []) as UserProgramMatch[]);
