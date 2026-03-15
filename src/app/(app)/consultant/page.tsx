@@ -1,5 +1,5 @@
 'use client';
-
+// v2 — prompt-first redesign
 import { useState, useEffect, useRef, useCallback, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
@@ -24,6 +24,7 @@ import {
 
 // ─── Types ──────────────────────────────────────────────────────────
 type ChatMode = 'general' | 'bizplan' | 'document';
+type PromptType = 'single' | 'eligibility' | 'bizplan' | 'document' | 'inquiry';
 
 interface MatchInfo {
   program: Program;
@@ -392,7 +393,6 @@ function ConsultantContent() {
   const [chatOpen, setChatOpen] = useState(false);
 
   // 단일 사업 모드: 프롬프트 타입 선택
-  type PromptType = 'single' | 'eligibility' | 'bizplan' | 'document' | 'inquiry';
   const [promptType, setPromptType] = useState<PromptType>('single');
 
   // 채팅 모드: URL 파라미터 or ?q= 내용 기반으로 초기값 결정
