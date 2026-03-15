@@ -9,6 +9,10 @@ import { useBusinessProfile } from '@/lib/business-profile-context';
 import {
   generateConsultingPrompt,
   generateSingleProgramPrompt,
+  generateEligibilityCheckPrompt,
+  generateBusinessPlanPrompt,
+  generateDocumentChecklistPrompt,
+  generateInquiryPrompt,
 } from '@/lib/ai/prompt-generator';
 import type { BusinessProfile, Program } from '@/types/database';
 import {
@@ -385,9 +389,13 @@ function ConsultantContent() {
   const [consultingPrompt, setConsultingPrompt] = useState('');
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
-  const [promptOpen, setPromptOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
 
-  // 모드: URL 파라미터 or ?q= 내용 기반으로 초기값 결정
+  // 단일 사업 모드: 프롬프트 타입 선택
+  type PromptType = 'single' | 'eligibility' | 'bizplan' | 'document' | 'inquiry';
+  const [promptType, setPromptType] = useState<PromptType>('single');
+
+  // 채팅 모드: URL 파라미터 or ?q= 내용 기반으로 초기값 결정
   const [mode, setMode] = useState<ChatMode>(() => {
     if (modeParam === 'bizplan') return 'bizplan';
     if (modeParam === 'document') return 'document';
@@ -466,10 +474,24 @@ function ConsultantContent() {
     if (!profileLoading) loadData();
   }, [loadData, profileLoading]);
 
-  const systemContext = consultingPrompt.slice(0, 2500);
+  // 현재 선택된 프롬프트 계산
+  const isSingleMode = !!programId && !!singleProgram;
+  const activePrompt = (() => {
+    if (!isSingleMode || !businessProfile || !singleProgram) return consultingPrompt;
+    const matchArg = singleMatchInfo ?? undefined;
+    switch (promptType) {
+      case 'eligibility': return generateEligibilityCheckPrompt(businessProfile, singleProgram);
+      case 'bizplan':     return generateBusinessPlanPrompt(businessProfile, singleProgram);
+      case 'document':    return generateDocumentChecklistPrompt(businessProfile, singleProgram);
+      case 'inquiry':     return generateInquiryPrompt(businessProfile, singleProgram);
+      default:            return generateSingleProgramPrompt(businessProfile, singleProgram, matchArg);
+    }
+  })();
+
+  const systemContext = activePrompt.slice(0, 2500);
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(consultingPrompt);
+    await navigator.clipboard.writeText(activePrompt);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -517,49 +539,64 @@ function ConsultantContent() {
     );
   }
 
-  const isSingleMode = !!programId && !!singleProgram;
-
-  // 초기 질문 결정
+  // 초기 채팅 질문 결정
   const initialQuestion = isSingleMode
     ? `"${singleProgram.title}" 지원사업에 대해 제 사업 상황에서 신청 가능한지, 그리고 가장 효과적인 신청 전략을 상세히 알려주세요.`
     : qParam ?? undefined;
 
+  // 단일 사업 모드: 프롬프트 타입 탭 정의
+  const PROMPT_TABS: { key: PromptType; label: string; desc: string }[] = [
+    { key: 'single',      label: '🎯 심층 분석',   desc: '신청 전략 + 합격 포인트' },
+    { key: 'eligibility', label: '📋 자격 확인',   desc: '신청 가능 여부 체크' },
+    { key: 'bizplan',     label: '📝 사업계획서',  desc: '작성 전략 + 목차' },
+    { key: 'document',    label: '📂 서류 안내',   desc: '필요 서류 체크리스트' },
+    { key: 'inquiry',     label: '📧 담당자 문의', desc: '문의 이메일 초안' },
+  ];
+
   return (
     <div className="px-4 py-6 max-w-3xl mx-auto space-y-4">
-      {/* 헤더 */}
+
+      {/* ── 헤더 ─────────────────────────────────────────────────────── */}
       <div className="flex items-start gap-3">
         {isSingleMode && (
           <Link href={`/programs/${programId}`}
-            className="mt-1 flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white transition-colors flex-shrink-0">
-            <ArrowLeft size={16} />
+            className="mt-1 p-1.5 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors flex-shrink-0">
+            <ArrowLeft size={18} />
           </Link>
         )}
         <div className="flex-1">
           <h1 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
             {isSingleMode
-              ? <><Target size={20} className="text-indigo-500" /> 맞춤 심층 상담</>
-              : <><Sparkles size={20} className="text-indigo-500" /> AI 지실장 상담</>
+              ? <><Target size={20} className="text-indigo-500" /> AI 프롬프트 생성</>
+              : <><Sparkles size={20} className="text-indigo-500" /> AI 프롬프트 생성</>
             }
           </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
             {isSingleMode
-              ? <span>{businessProfile.business_name} → <strong className="text-gray-700 dark:text-gray-300">{singleProgram.title}</strong></span>
+              ? <span className="line-clamp-1"><strong className="text-gray-700 dark:text-gray-300">{singleProgram.title}</strong></span>
               : `${businessProfile.business_name} · 맞춤 AI 상담`
             }
           </p>
         </div>
       </div>
 
-      {/* 특정 사업: 매칭 배지 */}
+      {/* ── 사용 안내 배너 ─────────────────────────────────────────── */}
+      <div className="flex items-start gap-3 px-4 py-3 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800 rounded-xl">
+        <span className="text-xl mt-0.5">💡</span>
+        <div className="text-sm text-indigo-800 dark:text-indigo-200">
+          <p className="font-semibold">프롬프트를 복사해서 Claude.ai나 ChatGPT에 붙여넣으세요</p>
+          <p className="text-xs text-indigo-600 dark:text-indigo-400 mt-0.5">내 사업 정보가 담긴 맞춤 프롬프트로 전문가 수준의 상담을 무료로 받을 수 있어요</p>
+        </div>
+      </div>
+
+      {/* ── 단일 사업: 매칭 배지 ───────────────────────────────────── */}
       {isSingleMode && singleMatchInfo && (
         <div className="flex flex-wrap gap-2">
-          <span className={`px-3 py-1.5 rounded-full text-sm font-bold ${
+          <span className={`px-3 py-1 rounded-full text-xs font-bold ${
             singleMatchInfo.score >= 80 ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400' :
             singleMatchInfo.score >= 60 ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' :
             'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400'
-          }`}>
-            AI 적합도 {singleMatchInfo.score}점
-          </span>
+          }`}>AI 적합도 {singleMatchInfo.score}점</span>
           {singleMatchInfo.reasons.slice(0, 3).map((r, i) => (
             <span key={i} className="px-2.5 py-1 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 rounded-full text-xs">✅ {r}</span>
           ))}
@@ -569,7 +606,7 @@ function ConsultantContent() {
         </div>
       )}
 
-      {/* 일반 모드: 프로필 요약 칩 */}
+      {/* ── 일반 모드: 프로필 칩 ───────────────────────────────────── */}
       {!isSingleMode && (
         <div className="flex flex-wrap gap-2">
           {[
@@ -585,92 +622,149 @@ function ConsultantContent() {
         </div>
       )}
 
-      {/* 모드 탭 (단일 사업 모드가 아닐 때만) */}
-      {!isSingleMode && (
-        <div className="flex gap-1.5 p-1 bg-gray-100 dark:bg-slate-700/50 rounded-xl">
-          {([
-            { key: 'general',  label: '💬 맞춤 상담' },
-            { key: 'bizplan',  label: '📝 사업계획서' },
-            { key: 'document', label: '📂 서류 안내' },
-          ] as { key: ChatMode; label: string }[]).map(({ key, label }) => (
-            <button
-              key={key}
-              onClick={() => setMode(key)}
-              className={`flex-1 py-2 px-2 rounded-lg text-xs sm:text-sm font-medium transition-all ${
-                mode === key
-                  ? 'bg-white dark:bg-slate-800 text-indigo-700 dark:text-indigo-300 shadow-sm'
-                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      )}
+      {/* ═══════════════════════════════════════════════════════════════
+          메인: 프롬프트 카드
+      ═══════════════════════════════════════════════════════════════ */}
+      {activePrompt && (
+        <div className="bg-white dark:bg-slate-800 border-2 border-indigo-200 dark:border-indigo-700 rounded-2xl overflow-hidden shadow-sm">
 
-      {/* 사업계획서 가이드 카드 */}
-      {mode === 'bizplan' && !isSingleMode && <BizplanGuideCard />}
-
-      {/* 채팅 (항상 표시) */}
-      <ChatSection
-        key={`${mode}-${isSingleMode}`}
-        systemContext={systemContext}
-        initialQuestion={initialQuestion}
-        mode={isSingleMode ? 'general' : mode}
-      />
-
-      {/* 프롬프트 섹션 (접이식) */}
-      {consultingPrompt && (
-        <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl overflow-hidden">
-          <button
-            onClick={() => setPromptOpen(o => !o)}
-            className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors"
-          >
-            <div className="flex items-center gap-2">
-              <Copy size={14} className="text-gray-400" />
-              <span className="text-sm font-medium text-gray-600 dark:text-gray-300">외부 AI용 프롬프트 보기</span>
-              <span className="text-xs text-gray-400 dark:text-gray-500">(Claude.ai, ChatGPT)</span>
-            </div>
-            {promptOpen
-              ? <ChevronUp size={16} className="text-gray-400" />
-              : <ChevronDown size={16} className="text-gray-400" />
-            }
-          </button>
-          {promptOpen && (
-            <>
-              <textarea
-                readOnly value={consultingPrompt} rows={10}
-                className="w-full px-5 pb-4 text-xs text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-slate-900/50 resize-none focus:outline-none font-mono leading-relaxed border-t border-gray-100 dark:border-slate-700"
-              />
-              <div className="px-5 py-4 border-t border-gray-100 dark:border-slate-700 flex flex-wrap gap-2">
-                <button onClick={handleCopy}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    copied
-                      ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800'
-                      : 'bg-indigo-600 hover:bg-indigo-700 text-white'
-                  }`}>
-                  {copied ? <Check size={14} /> : <Copy size={14} />}
-                  {copied ? '복사됨!' : '프롬프트 복사'}
-                </button>
-                <a href="https://claude.ai" target="_blank" rel="noopener noreferrer"
-                  className="flex items-center gap-2 px-4 py-2 bg-orange-50 dark:bg-orange-900/20 hover:bg-orange-100 text-orange-700 dark:text-orange-400 border border-orange-200 dark:border-orange-800 rounded-lg text-sm font-medium transition-colors">
-                  <ExternalLink size={13} /> Claude.ai
-                </a>
-                <a href="https://chatgpt.com" target="_blank" rel="noopener noreferrer"
-                  className="flex items-center gap-2 px-4 py-2 bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 rounded-lg text-sm font-medium transition-colors">
-                  <ExternalLink size={13} /> ChatGPT
-                </a>
+          {/* 단일 사업 모드: 프롬프트 타입 탭 */}
+          {isSingleMode && (
+            <div className="border-b border-gray-100 dark:border-slate-700 overflow-x-auto">
+              <div className="flex min-w-max px-2 pt-2 gap-1">
+                {PROMPT_TABS.map(({ key, label, desc }) => (
+                  <button
+                    key={key}
+                    onClick={() => setPromptType(key)}
+                    className={`flex flex-col items-start px-3 py-2 rounded-t-lg text-xs font-medium transition-all border-b-2 ${
+                      promptType === key
+                        ? 'border-indigo-500 text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/20'
+                        : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-slate-700/50'
+                    }`}
+                  >
+                    <span>{label}</span>
+                    <span className="text-gray-400 dark:text-gray-500 font-normal mt-0.5">{desc}</span>
+                  </button>
+                ))}
               </div>
-            </>
+            </div>
           )}
+
+          {/* 일반 모드: 상단 라벨 */}
+          {!isSingleMode && (
+            <div className="px-5 py-3 border-b border-gray-100 dark:border-slate-700 flex items-center gap-2">
+              <Sparkles size={15} className="text-indigo-500" />
+              <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">맞춤 AI 프롬프트</span>
+              <span className="ml-auto text-xs text-gray-400">Top {topMatches.length}개 사업 기준</span>
+            </div>
+          )}
+
+          {/* 프롬프트 텍스트 */}
+          <textarea
+            readOnly
+            value={activePrompt}
+            rows={12}
+            className="w-full px-5 py-4 text-sm text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-slate-900/40 resize-none focus:outline-none leading-relaxed"
+            onClick={(e) => (e.target as HTMLTextAreaElement).select()}
+          />
+
+          {/* 복사 + 링크 버튼 */}
+          <div className="px-5 py-4 border-t border-gray-100 dark:border-slate-700 bg-white dark:bg-slate-800">
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={handleCopy}
+                className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+                  copied
+                    ? 'bg-emerald-500 text-white'
+                    : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                }`}
+              >
+                {copied ? <Check size={15} /> : <Copy size={15} />}
+                {copied ? '복사됐어요!' : '프롬프트 복사'}
+              </button>
+              <a
+                href="https://claude.ai"
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={handleCopy}
+                className="flex items-center gap-2 px-4 py-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-sm font-medium transition-colors"
+              >
+                <ExternalLink size={13} /> Claude.ai 열기
+              </a>
+              <a
+                href="https://chatgpt.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={handleCopy}
+                className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-medium transition-colors"
+              >
+                <ExternalLink size={13} /> ChatGPT 열기
+              </a>
+            </div>
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
+              💡 링크 버튼을 클릭하면 프롬프트가 자동 복사돼요 — 열린 창에서 붙여넣기(Ctrl+V)하세요
+            </p>
+          </div>
         </div>
       )}
 
-      <p className="text-xs text-center text-gray-400 dark:text-gray-500 pb-2">
-        Google Gemini Flash 2.0 · 분당 최대 15회 무료 ·{' '}
-        <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer"
-          className="underline hover:text-indigo-500">API 키 발급</a>
-      </p>
+      {/* ═══════════════════════════════════════════════════════════════
+          부수: AI 채팅 (접이식)
+      ═══════════════════════════════════════════════════════════════ */}
+      <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl overflow-hidden">
+        <button
+          onClick={() => setChatOpen(o => !o)}
+          className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors"
+        >
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center">
+              <Bot size={14} className="text-white" />
+            </div>
+            <div className="text-left">
+              <p className="text-sm font-semibold text-gray-800 dark:text-white">지실장 AI 채팅</p>
+              <p className="text-xs text-gray-400">직접 질문하기 · Gemini Flash 2.0</p>
+            </div>
+          </div>
+          {chatOpen
+            ? <ChevronUp size={16} className="text-gray-400" />
+            : <ChevronDown size={16} className="text-gray-400" />
+          }
+        </button>
+
+        {chatOpen && (
+          <>
+            {/* 채팅 모드 탭 (일반 모드에서만) */}
+            {!isSingleMode && (
+              <div className="flex gap-1 px-4 pb-2 border-b border-gray-100 dark:border-slate-700">
+                {([
+                  { key: 'general',  label: '💬 상담' },
+                  { key: 'bizplan',  label: '📝 사업계획서' },
+                  { key: 'document', label: '📂 서류' },
+                ] as { key: ChatMode; label: string }[]).map(({ key, label }) => (
+                  <button
+                    key={key}
+                    onClick={() => setMode(key)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                      mode === key
+                        ? 'bg-indigo-600 text-white'
+                        : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-700'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+            <ChatSection
+              key={`${mode}-${isSingleMode}-${chatOpen}`}
+              systemContext={systemContext}
+              initialQuestion={undefined}
+              mode={isSingleMode ? 'general' : mode}
+            />
+          </>
+        )}
+      </div>
+
     </div>
   );
 }
