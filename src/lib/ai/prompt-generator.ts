@@ -1,28 +1,39 @@
 import type { BusinessProfile, Program } from '@/types/database';
 
+export interface SingleProgramMatchInfo {
+  score: number;
+  reasons: string[];
+  mismatches: string[];
+}
+
 interface MatchInfo {
   program: Program;
   score: number;
   reasons: string[];
+  mismatches?: string[];
+}
+
+// ─── 금액 포맷 (만원 단위 입력) ───────────────────────────────────────────────
+function fmt만원(n: number): string {
+  if (n >= 10_000) {
+    const eok = n / 10_000;
+    return `${Number.isInteger(eok) ? eok : eok.toFixed(1)}억원`;
+  }
+  if (n >= 1_000) return `${Math.round(n / 1_000)}천만원`;
+  return `${n.toLocaleString()}만원`;
 }
 
 function formatAmount(min: number | null, max: number | null): string {
   if (!min && !max) return '미정';
-  const fmt = (n: number) =>
-    n >= 100_000_000
-      ? `${(n / 100_000_000).toFixed(0)}억원`
-      : `${(n / 10_000).toFixed(0)}만원`;
-  if (min && max) return `${fmt(min)} ~ ${fmt(max)}`;
-  if (max) return `최대 ${fmt(max)}`;
-  return `${fmt(min!)} 이상`;
+  if (min && max) return `${fmt만원(min)} ~ ${fmt만원(max)}`;
+  if (max) return `최대 ${fmt만원(max)}`;
+  return `${fmt만원(min!)} 이상`;
 }
 
-// annual_revenue is stored in 백만원 (million KRW) units in the DB
 function formatRevenueMillion(mil: number): string {
   if (mil >= 100) {
     const eok = mil / 100;
-    const eokStr = Number.isInteger(eok) ? eok.toString() : eok.toFixed(1);
-    return `약 ${eokStr}억원`;
+    return `약 ${Number.isInteger(eok) ? eok : eok.toFixed(1)}억원`;
   }
   return `약 ${mil}백만원`;
 }
@@ -36,312 +47,249 @@ function formatDeadline(end: string | null): string {
   return `D-${daysLeft} (${d.toLocaleDateString('ko-KR')})`;
 }
 
-export function generateConsultingPrompt(
-  profile: BusinessProfile,
-  matches: MatchInfo[],
-): string {
-  const top = matches.slice(0, 5);
-
+// ─── 공통 프로필 블록 생성 ─────────────────────────────────────────────────────
+function buildProfileBlock(profile: BusinessProfile): string {
   const certs = [
-    profile.is_venture && '벤처기업',
-    profile.is_innobiz && '이노비즈',
-    profile.is_mainbiz && '메인비즈',
+    profile.is_venture    && '벤처기업',
+    profile.is_innobiz    && '이노비즈',
+    profile.is_mainbiz    && '메인비즈',
+    profile.has_smart_factory && `스마트공장${profile.smart_factory_level ? `(${profile.smart_factory_level})` : ''}`,
   ].filter(Boolean);
 
-  const bizLines = [
+  return [
     `- 사업체명: ${profile.business_name}`,
+    profile.business_entity_type && `- 사업자 유형: ${profile.business_entity_type}`,
     `- 업종: ${profile.business_type}${profile.business_category ? ` / ${profile.business_category}` : ''}`,
+    profile.main_products && `- 주요 제품/서비스: ${profile.main_products}`,
     `- 지역: ${profile.region_sido}${profile.region_sigungu ? ` ${profile.region_sigungu}` : ''}`,
-    profile.employee_count != null && `- 직원수: ${profile.employee_count}명`,
-    profile.annual_revenue != null &&
-      `- 연매출: ${formatRevenueMillion(profile.annual_revenue)}`,
+    profile.employee_count    != null && `- 직원수: ${profile.employee_count}명`,
+    profile.annual_revenue    != null && `- 연매출: ${formatRevenueMillion(profile.annual_revenue)}`,
     profile.company_age_years != null && `- 업력: ${profile.company_age_years}년`,
-    certs.length > 0 && `- 보유인증: ${certs.join(', ')}`,
-    profile.goals.length > 0 && `- 주요 목표: ${profile.goals.join(', ')}`,
-    profile.current_challenges.length > 0 &&
-      `- 현재 어려움: ${profile.current_challenges.join(', ')}`,
-    profile.notes && `- 기타: ${profile.notes}`,
-  ]
-    .filter(Boolean)
-    .join('\n');
-
-  const programList = top
-    .map((m, i) => {
-      const p = m.program;
-      return [
-        `### ${i + 1}. ${p.title} (적합도: ${m.score}점)`,
-        `- 주관기관: ${p.managing_org ?? '미정'}`,
-        `- 지원유형: ${p.support_type ?? p.category}`,
-        `- 지원금액: ${formatAmount(p.funding_amount_min, p.funding_amount_max)}`,
-        `- 신청마감: ${formatDeadline(p.application_end)}`,
-        p.eligibility_summary && `- 자격요건: ${p.eligibility_summary}`,
-        m.reasons.length > 0 && `- 매칭사유: ${m.reasons.slice(0, 3).join(', ')}`,
-      ]
-        .filter(Boolean)
-        .join('\n');
-    })
-    .join('\n\n');
-
-  return `안녕하세요! 저는 정부 지원사업 신청을 도움받고 싶은 사업주입니다.
-AI 매칭 시스템으로 분석한 제 사업 정보와 추천 지원사업을 공유드리니, 전문적인 상담 부탁드립니다.
-
-## 제 사업 정보
-
-${bizLines}
-
-## AI 매칭 추천 지원사업 Top ${top.length}
-
-${programList}
-
-## 상담 요청 사항
-
-위 정보를 바탕으로 다음 사항을 도와주세요:
-
-1. **우선순위 추천**: 위 프로그램 중 제 상황에 가장 적합한 순서로 추천해 주세요.
-2. **신청 전략**: 각 프로그램의 핵심 포인트와 주의사항을 알려주세요.
-3. **준비 서류**: 신청에 필요한 서류와 준비 방법을 안내해 주세요.
-4. **중복 신청**: 동시에 신청 가능한 조합이 있다면 알려주세요.
-5. **추가 조언**: 제 상황에서 놓치면 안 될 중요한 사항이 있다면 말씀해 주세요.
-
-구체적이고 실용적인 조언 부탁드립니다!`;
+    profile.has_export && profile.annual_export_amount != null
+      && `- 수출실적: 연 ${profile.annual_export_amount.toLocaleString()}달러`,
+    certs.length > 0 && `- 보유 인증: ${certs.join(', ')}`,
+    profile.goals.length > 0 && `- 현재 목표: ${profile.goals.join(', ')}`,
+    profile.current_challenges.length > 0 && `- 현재 어려움: ${profile.current_challenges.join(', ')}`,
+    profile.previous_subsidies.length > 0 &&
+      `- 기수령 지원사업: ${profile.previous_subsidies
+        .slice(0, 3)
+        .map(s => `${s.name}(${s.year}년, ${s.amount.toLocaleString()}만원)`)
+        .join(', ')}`,
+    profile.notes && `- 기타 메모: ${profile.notes}`,
+  ].filter(Boolean).join('\n');
 }
 
-// ─── 사업계획서 작성 프롬프트 ────────────────────────────────────────────────
-export function generateBusinessPlanPrompt(
-  profile: BusinessProfile,
-  program: Program,
-): string {
-  return `안녕하세요! 아래 지원사업의 사업계획서 작성을 도와주세요.
-
-## 지원사업 정보
-- 사업명: ${program.title}
-- 주관기관: ${program.managing_org ?? '미정'}
-- 지원유형: ${program.support_type ?? program.category}
-- 지원금액: 최대 ${program.funding_amount_max ? `${(program.funding_amount_max / 10000).toFixed(0)}만원` : '미정'}
-- 신청마감: ${program.application_end ? new Date(program.application_end).toLocaleDateString('ko-KR') : '상시'}
-${program.eligibility_summary ? `- 신청자격: ${program.eligibility_summary}` : ''}
-
-## 우리 회사 정보
-- 사업체명: ${profile.business_name}
-- 업종: ${profile.business_type}${profile.business_category ? ` (${profile.business_category})` : ''}
-- 지역: ${profile.region_sido}${profile.region_sigungu ? ` ${profile.region_sigungu}` : ''}
-${profile.employee_count != null ? `- 직원수: ${profile.employee_count}명` : ''}
-${profile.annual_revenue != null ? `- 연매출: 약 ${profile.annual_revenue}백만원` : ''}
-${profile.company_age_years != null ? `- 업력: ${profile.company_age_years}년` : ''}
-${profile.main_products ? `- 주요 제품/서비스: ${profile.main_products}` : ''}
-- 주요 목표: ${profile.goals.join(', ')}
-- 현재 어려움: ${profile.current_challenges.join(', ')}
-
-## 요청 사항
-
-위 지원사업에 제출할 사업계획서를 작성해 주세요. 아래 항목을 포함해 주세요:
-
-1. **사업 개요** (현황 및 문제점, 해결 방안)
-2. **지원 필요성** (왜 이 지원사업이 우리 회사에 필요한가)
-3. **추진 계획** (단계별 추진 일정 및 방법)
-4. **기대 효과** (지원 후 예상되는 성과 및 파급효과)
-5. **예산 계획** (지원금 사용처 및 자부담 계획)
-
-평가위원이 호감을 갖도록 설득력 있게, 구체적인 수치와 근거를 포함해 작성해 주세요.`;
-}
-
-// ─── 자격요건 확인 프롬프트 ──────────────────────────────────────────────────
-export function generateEligibilityCheckPrompt(
-  profile: BusinessProfile,
-  program: Program,
-): string {
-  return `아래 정부지원사업의 신청 자격 요건을 분석해서 우리 회사가 신청 가능한지 판단해 주세요.
-
-## 지원사업 정보
-- 사업명: ${program.title}
-- 주관기관: ${program.managing_org ?? '미정'}
-${program.description ? `- 사업 개요: ${program.description.slice(0, 500)}` : ''}
-${program.eligibility_summary ? `- 신청 자격(요약): ${program.eligibility_summary}` : ''}
-${program.target_company_size.length > 0 ? `- 대상 기업규모: ${program.target_company_size.join(', ')}` : ''}
-${program.target_industries.length > 0 ? `- 대상 업종: ${program.target_industries.join(', ')}` : ''}
-${program.min_company_age != null ? `- 최소 업력: ${program.min_company_age}년 이상` : ''}
-${program.min_employee_count != null ? `- 직원수 조건: ${program.min_employee_count}명 이상` : ''}
-
-## 우리 회사 정보
-- 사업체명: ${profile.business_name}
-- 업종: ${profile.business_type}${profile.business_category ? ` (${profile.business_category})` : ''}
-- 지역: ${profile.region_sido}
-- 사업자 유형: ${profile.business_entity_type ?? '미확인'}
-${profile.employee_count != null ? `- 직원수: ${profile.employee_count}명` : ''}
-${profile.annual_revenue != null ? `- 연매출: 약 ${profile.annual_revenue}백만원` : ''}
-${profile.company_age_years != null ? `- 업력: ${profile.company_age_years}년` : ''}
-- 보유인증: ${[profile.is_venture && '벤처기업', profile.is_innobiz && '이노비즈', profile.is_mainbiz && '메인비즈'].filter(Boolean).join(', ') || '없음'}
-
-## 분석 요청
-
-1. **신청 가능 여부**: 가능 / 불가능 / 확인 필요로 명확히 답해 주세요
-2. **충족 요건**: 우리 회사가 충족하는 자격 요건을 나열해 주세요
-3. **미충족/불확실 요건**: 충족하지 못하거나 확인이 필요한 항목을 알려주세요
-4. **보완 방법**: 미충족 요건이 있다면 보완 가능한 방법을 제안해 주세요
-5. **주의사항**: 신청 전 반드시 확인해야 할 사항을 알려주세요`;
-}
-
-// ─── 서류 체크리스트 프롬프트 ────────────────────────────────────────────────
-export function generateDocumentChecklistPrompt(
-  profile: BusinessProfile,
-  program: Program,
-): string {
-  return `아래 지원사업 신청에 필요한 서류 목록과 준비 방법을 상세히 알려주세요.
-
-## 지원사업 정보
-- 사업명: ${program.title}
-- 주관기관: ${program.managing_org ?? '미정'}
-- 지원유형: ${program.support_type ?? program.category}
-${program.required_documents.length > 0 ? `- 기재된 필요 서류: ${program.required_documents.join(', ')}` : ''}
-${program.application_end ? `- 신청 마감: ${new Date(program.application_end).toLocaleDateString('ko-KR')}` : ''}
-
-## 우리 회사 정보
-- 사업체명: ${profile.business_name}
-- 사업자 유형: ${profile.business_entity_type ?? '미확인'}
-- 업종: ${profile.business_type}
-${profile.employee_count != null ? `- 직원수: ${profile.employee_count}명` : ''}
-- 보유인증: ${[profile.is_venture && '벤처기업', profile.is_innobiz && '이노비즈', profile.is_mainbiz && '메인비즈'].filter(Boolean).join(', ') || '없음'}
-
-## 요청 사항
-
-1. **필수 서류 체크리스트**: 반드시 제출해야 하는 서류를 번호 목록으로 정리해 주세요
-2. **선택/추가 서류**: 가산점이나 유리한 평가를 위해 제출하면 좋은 서류를 알려주세요
-3. **발급처 및 준비 방법**: 각 서류를 어디서, 어떻게 발급받는지 알려주세요
-4. **준비 기간**: 서류별 예상 준비 기간을 알려주세요 (당일발급 / 수일소요 등)
-5. **유효기간 주의**: 유효기간이 있는 서류와 기간을 명시해 주세요
-6. **실수 방지 팁**: 서류 준비 시 자주 하는 실수나 놓치기 쉬운 사항을 알려주세요`;
-}
-
-// ─── 담당기관 문의 프롬프트 ──────────────────────────────────────────────────
-export function generateInquiryPrompt(
-  profile: BusinessProfile,
-  program: Program,
-): string {
-  return `아래 정부지원사업 담당 기관에 문의할 때 사용할 효과적인 질문 목록을 만들어 주세요.
-
-## 지원사업 정보
-- 사업명: ${program.title}
-- 주관기관: ${program.managing_org ?? '미정'}
-- 지원유형: ${program.support_type ?? program.category}
-${program.application_end ? `- 신청 마감: ${new Date(program.application_end).toLocaleDateString('ko-KR')}` : ''}
-
-## 우리 회사 정보
-- 업종: ${profile.business_type}
-- 지역: ${profile.region_sido}
-${profile.employee_count != null ? `- 직원수: ${profile.employee_count}명` : ''}
-${profile.company_age_years != null ? `- 업력: ${profile.company_age_years}년` : ''}
-- 목표: ${profile.goals.slice(0, 3).join(', ')}
-
-## 요청 사항
-
-1. **자격요건 확인 질문**: 우리 회사의 신청 자격을 확인하기 위한 질문
-2. **서류 관련 질문**: 제출 서류와 양식에 대한 질문
-3. **심사 기준 질문**: 평가 방법과 선정 기준에 대한 질문
-4. **일정 관련 질문**: 신청 절차와 결과 발표 일정에 대한 질문
-5. **추가 혜택 질문**: 연계 가능한 다른 지원사업이나 추가 혜택에 대한 질문
-
-각 질문은 담당자가 명확하게 답변할 수 있도록 구체적으로 작성해 주세요.
-전화/이메일 문의 시 바로 사용할 수 있는 형태로 만들어 주세요.`;
-}
-
-// ─── 특정 지원사업 전용 프롬프트 ─────────────────────────────────────
-export interface SingleProgramMatchInfo {
-  score: number;
-  reasons: string[];
-  mismatches: string[];
-}
-
-export function generateSingleProgramPrompt(
-  profile: BusinessProfile,
-  program: Program,
-  matchInfo?: SingleProgramMatchInfo,
-): string {
-  const certs = [
-    profile.is_venture && '벤처기업',
-    profile.is_innobiz && '이노비즈',
-    profile.is_mainbiz && '메인비즈',
-  ].filter(Boolean);
-
-  const bizLines = [
-    `- 사업체명: ${profile.business_name}`,
-    `- 업종: ${profile.business_type}${profile.business_category ? ` / ${profile.business_category}` : ''}`,
-    `- 지역: ${profile.region_sido}${profile.region_sigungu ? ` ${profile.region_sigungu}` : ''}`,
-    profile.employee_count != null && `- 직원수: ${profile.employee_count}명`,
-    profile.annual_revenue != null &&
-      `- 연매출: ${formatRevenueMillion(profile.annual_revenue)}`,
-    profile.company_age_years != null && `- 업력: ${profile.company_age_years}년`,
-    certs.length > 0 && `- 보유인증: ${certs.join(', ')}`,
-    profile.goals.length > 0 && `- 주요 목표: ${profile.goals.join(', ')}`,
-    profile.current_challenges.length > 0 &&
-      `- 현재 어려움: ${profile.current_challenges.join(', ')}`,
-    profile.notes && `- 기타: ${profile.notes}`,
-  ]
-    .filter(Boolean)
-    .join('\n');
-
-  const programLines = [
+// ─── 공통 프로그램 블록 생성 ─────────────────────────────────────────────────
+function buildProgramBlock(program: Program, includeDescription = true): string {
+  return [
     `- 사업명: ${program.title}`,
     `- 주관기관: ${program.managing_org ?? '미정'}`,
     program.implementing_org && `- 운영기관: ${program.implementing_org}`,
     `- 분류: ${program.category}${program.subcategory ? ` > ${program.subcategory}` : ''}`,
     program.support_type && `- 지원유형: ${program.support_type}`,
     `- 지원금액: ${formatAmount(program.funding_amount_min, program.funding_amount_max)}`,
-    program.self_funding_ratio != null &&
-      `- 자부담 비율: ${program.self_funding_ratio}%`,
+    program.self_funding_ratio != null && `- 자부담 비율: ${program.self_funding_ratio}%`,
     `- 신청마감: ${formatDeadline(program.application_end)}`,
-    program.target_company_size.length > 0 &&
-      `- 대상 기업규모: ${program.target_company_size.join(', ')}`,
-    program.target_regions.length > 0 &&
-      `- 대상 지역: ${program.target_regions.join(', ')}`,
-    program.target_industries.length > 0 &&
-      `- 대상 업종: ${program.target_industries.join(', ')}`,
-    program.min_employee_count != null &&
-      `- 최소 직원수: ${program.min_employee_count}명 이상`,
-    program.max_employee_count != null &&
-      `- 최대 직원수: ${program.max_employee_count}명 이하`,
-    program.min_company_age != null &&
-      `- 최소 업력: ${program.min_company_age}년 이상`,
-    program.description && `\n**사업 개요:**\n${program.description}`,
-    program.eligibility_summary && `\n**신청 자격:**\n${program.eligibility_summary}`,
+    program.target_company_size.length > 0 && `- 대상 기업규모: ${program.target_company_size.join(', ')}`,
+    program.target_industries.length > 0  && `- 대상 업종: ${program.target_industries.join(', ')}`,
+    program.target_regions.length > 0     && `- 대상 지역: ${program.target_regions.join(', ')}`,
+    program.min_employee_count != null && `- 직원수 조건: ${program.min_employee_count}명 이상${program.max_employee_count != null ? ` ${program.max_employee_count}명 이하` : ''}`,
+    program.min_company_age    != null && `- 업력 조건: ${program.min_company_age}년 이상${program.max_company_age != null ? ` ${program.max_company_age}년 이하` : ''}`,
+    includeDescription && program.eligibility_summary && `\n**신청 자격:**\n${program.eligibility_summary}`,
+    includeDescription && program.description &&
+      `\n**사업 개요:**\n${program.description.slice(0, 600)}${program.description.length > 600 ? '...' : ''}`,
     program.required_documents.length > 0 &&
-      `\n**필요 서류:**\n${program.required_documents.map((d) => `- ${d}`).join('\n')}`,
-  ]
-    .filter(Boolean)
-    .join('\n');
+      `\n**필요 서류:**\n${program.required_documents.map(d => `- ${d}`).join('\n')}`,
+  ].filter(Boolean).join('\n');
+}
 
-  const matchLines = matchInfo
+// ─── 1. 맞춤 지원사업 Top N 종합 상담 ────────────────────────────────────────
+export function generateConsultingPrompt(
+  profile: BusinessProfile,
+  matches: MatchInfo[],
+): string {
+  const top = matches.slice(0, 5);
+
+  const programList = top.map((m, i) => {
+    const p = m.program;
+    const lines = [
+      `### ${i + 1}. ${p.title} (적합도 ${m.score}점)`,
+      `- 주관기관: ${p.managing_org ?? '미정'} | 지원유형: ${p.support_type ?? p.category}`,
+      `- 지원금액: ${formatAmount(p.funding_amount_min, p.funding_amount_max)} | 마감: ${formatDeadline(p.application_end)}`,
+      p.target_company_size.length > 0 && `- 대상기업: ${p.target_company_size.join(', ')}`,
+      p.eligibility_summary && `- 자격요건: ${p.eligibility_summary.slice(0, 150)}`,
+      m.reasons.length > 0 && `- 매칭근거: ${m.reasons.slice(0, 3).join(', ')}`,
+      (m.mismatches?.length ?? 0) > 0 && `- 확인필요: ${m.mismatches!.slice(0, 2).join(', ')}`,
+    ].filter(Boolean).join('\n');
+    return lines;
+  }).join('\n\n');
+
+  return `안녕하세요! 정부 지원사업 신청을 준비 중인 사업주입니다.
+AI 매칭 시스템이 분석한 저의 사업 프로필과 추천 지원사업을 공유드립니다.
+
+## 제 사업 프로필
+
+${buildProfileBlock(profile)}
+
+## AI 추천 지원사업 Top ${top.length}
+
+${programList}
+
+## 종합 상담 요청
+
+위 정보를 바탕으로 다음을 도와주세요:
+
+1. **우선순위**: 제 상황에 가장 적합한 프로그램 순서와 이유를 설명해 주세요.
+2. **신청 전략**: 각 프로그램의 핵심 합격 포인트와 경쟁력 있는 신청 방법을 알려주세요.
+3. **중복 신청 가능 여부**: 동시에 신청할 수 있는 조합과 주의사항을 알려주세요.
+4. **준비 서류**: 공통적으로 필요한 기본 서류와 각 프로그램별 추가 서류를 정리해 주세요.
+5. **단기/장기 로드맵**: 올해 안에 신청할 수 있는 최적의 순서와 일정을 제안해 주세요.
+
+구체적이고 실용적인 조언을 부탁드립니다!`;
+}
+
+// ─── 2. 특정 지원사업 심층 분석 ──────────────────────────────────────────────
+export function generateSingleProgramPrompt(
+  profile: BusinessProfile,
+  program: Program,
+  matchInfo?: SingleProgramMatchInfo,
+): string {
+  const matchBlock = matchInfo
     ? [
-        `- AI 적합도 점수: ${matchInfo.score}점 / 100점`,
-        matchInfo.reasons.length > 0 &&
-          `- 적합 사유: ${matchInfo.reasons.join(', ')}`,
-        matchInfo.mismatches.length > 0 &&
-          `- 확인 필요 사항: ${matchInfo.mismatches.join(', ')}`,
-      ]
-        .filter(Boolean)
-        .join('\n')
+        `- AI 적합도: ${matchInfo.score}점 / 100점`,
+        matchInfo.reasons.length > 0    && `- 적합 근거: ${matchInfo.reasons.join(', ')}`,
+        matchInfo.mismatches.length > 0 && `- 불일치/확인필요: ${matchInfo.mismatches.join(', ')}`,
+      ].filter(Boolean).join('\n')
     : null;
 
-  return `안녕하세요! 아래 특정 지원사업 신청과 관련해 심층 상담을 요청드립니다.
+  return `안녕하세요! 아래 지원사업 신청에 대해 심층 분석을 요청드립니다.
 
-## 제 사업 정보
+## 제 사업 프로필
 
-${bizLines}
+${buildProfileBlock(profile)}
 
-## 상담 대상 지원사업
+## 분석 대상 지원사업
 
-${programLines}
-${matchLines ? `\n## AI 매칭 분석\n\n${matchLines}` : ''}
+${buildProgramBlock(program, true)}
+${matchBlock ? `\n## AI 매칭 분석\n\n${matchBlock}` : ''}
 
-## 심층 상담 요청 사항
+## 심층 분석 요청
 
-이 지원사업에 대해 다음을 상세히 알려주세요:
-
-1. **신청 가능 여부**: 제 사업이 이 지원사업의 신청 자격에 해당하는지 구체적으로 분석해 주세요.
-2. **신청 전략**: 합격 가능성을 높이기 위한 핵심 포인트와 차별화 전략을 알려주세요.
-3. **준비 서류 체크리스트**: 필요한 서류 목록과 각 서류의 준비 방법을 안내해 주세요.
-4. **사업계획서 작성 팁**: 이 사업의 평가 기준에 맞는 사업계획서 작성 방향을 알려주세요.
-5. **주의사항 및 실수 방지**: 신청 시 자주 하는 실수나 놓치기 쉬운 사항을 알려주세요.
-6. **신청 일정 관리**: 마감일을 고려한 최적의 신청 준비 일정을 제안해 주세요.
+1. **신청 자격 판단**: 제 회사가 이 사업의 자격 요건을 충족하는지 항목별로 분석해 주세요. (가능 / 불가 / 확인필요)
+2. **합격 전략**: 선정 가능성을 높이기 위한 핵심 포인트와 차별화 전략을 알려주세요.
+3. **서류 체크리스트**: 필요한 서류 목록, 발급처, 준비 기간을 정리해 주세요.
+4. **사업계획서 방향**: 이 사업의 평가 기준에 맞는 사업계획서 핵심 포인트를 알려주세요.
+5. **주의사항**: 자주 하는 실수, 탈락 원인, 놓치기 쉬운 사항을 알려주세요.
+6. **준비 일정**: 마감일 기준 역산한 최적 준비 일정을 제안해 주세요.
 
 최대한 구체적이고 실용적인 조언 부탁드립니다!`;
+}
+
+// ─── 3. 사업계획서 작성 ──────────────────────────────────────────────────────
+export function generateBusinessPlanPrompt(
+  profile: BusinessProfile,
+  program: Program,
+): string {
+  return `아래 지원사업의 사업계획서 작성을 도와주세요.
+
+## 지원사업 정보
+
+${buildProgramBlock(program, true)}
+
+## 우리 회사 정보
+
+${buildProfileBlock(profile)}
+
+## 사업계획서 작성 요청
+
+다음 구조로 심사위원을 설득할 수 있는 사업계획서 초안을 작성해 주세요:
+
+1. **현황 및 문제점** — 현재 우리 회사의 상황과 해결이 필요한 문제를 구체적 수치와 함께
+2. **지원 필요성** — 이 지원사업이 왜 우리 회사에 반드시 필요한지 논리적 근거
+3. **추진 계획** — 단계별 실행 방법, 일정, 담당자 (최대한 구체적으로)
+4. **기대 효과** — 지원 후 예상 성과를 정량적 수치로 (매출 N% 증가, 고용 N명 창출 등)
+5. **예산 계획** — 지원금 사용처, 자부담 계획, 비용 대비 효과
+
+평가위원이 선정하고 싶은 사업계획서가 되도록, 이 사업의 핵심 키워드를 자연스럽게 포함해 주세요.`;
+}
+
+// ─── 4. 자격요건 확인 ────────────────────────────────────────────────────────
+export function generateEligibilityCheckPrompt(
+  profile: BusinessProfile,
+  program: Program,
+): string {
+  return `아래 지원사업의 신청 자격을 항목별로 분석해 주세요.
+
+## 지원사업 정보
+
+${buildProgramBlock(program, true)}
+
+## 우리 회사 정보
+
+${buildProfileBlock(profile)}
+
+## 자격 분석 요청
+
+각 자격 항목에 대해 ✅ 충족 / ❌ 미충족 / ❓ 확인필요 형식으로 판단해 주세요:
+
+1. **기업 유형/규모** — 소상공인/중소기업 해당 여부, 사업자 유형
+2. **업종** — 대상 업종 해당 여부 (제외 업종 포함)
+3. **지역** — 사업 소재지 조건 충족 여부
+4. **직원수/매출** — 수치 조건 충족 여부
+5. **업력** — 창업 후 경과 기간 조건
+6. **인증/자격** — 필요한 인증이나 특수 자격 보유 여부
+7. **중복 수혜 제한** — 기수령 지원사업과 중복 여부
+
+마지막으로 **종합 판단**과 **미충족 항목 보완 방법**을 알려주세요.`;
+}
+
+// ─── 5. 서류 체크리스트 ──────────────────────────────────────────────────────
+export function generateDocumentChecklistPrompt(
+  profile: BusinessProfile,
+  program: Program,
+): string {
+  return `아래 지원사업 신청에 필요한 서류를 정리해 주세요.
+
+## 지원사업 정보
+
+${buildProgramBlock(program, false)}
+
+## 우리 회사 정보 (서류 범위 판단용)
+
+${buildProfileBlock(profile)}
+
+## 서류 안내 요청
+
+1. **필수 서류 체크리스트** — 번호 목록으로 정리 (서류명 / 발급처 / 비용 / 유효기간)
+2. **선택/가산점 서류** — 제출 시 유리한 서류와 이유
+3. **준비 기간** — 서류별 예상 소요 기간 (당일 / 2~3일 / 1주일 이상)
+4. **온라인 발급** — 정부24, 홈택스 등 온라인 발급 가능 서류와 URL
+5. **주의사항** — 유효기간 임박 서류, 자주 하는 실수, 함정 포인트
+6. **제출 전 최종 확인 체크리스트** — 제출 직전 확인할 사항 요약`;
+}
+
+// ─── 6. 담당기관 문의 질문 생성 ──────────────────────────────────────────────
+export function generateInquiryPrompt(
+  profile: BusinessProfile,
+  program: Program,
+): string {
+  return `아래 지원사업 담당 기관 문의 시 사용할 질문 목록을 만들어 주세요.
+
+## 지원사업 정보
+
+${buildProgramBlock(program, false)}
+
+## 우리 회사 정보
+
+${buildProfileBlock(profile)}
+
+## 요청 사항
+
+전화/이메일로 바로 사용 가능한 형태로, 아래 주제별 질문 2~3개씩 작성해 주세요:
+
+1. **자격요건 확인** — 우리 회사의 신청 가능 여부 확인
+2. **서류 관련** — 특수 상황에서의 서류 대체/면제 가능 여부
+3. **심사 기준** — 평가 항목 비중과 선정 기준
+4. **중복 신청** — 현재 수혜 중인 사업과의 중복 여부
+5. **실무 절차** — 접수 방법, 온/오프라인 여부, 담당자 연락처`;
 }

@@ -19,6 +19,8 @@ import { createSupabaseAdmin } from '@/lib/supabase-admin';
 import {
   fetchAllOpenPrograms,
   parseBizinfoItem,
+  fetchBizinfoDetail,
+  enrichWithDetail,
 } from '@/lib/data/bizinfo-client';
 import {
   fetchAllMssBizPrograms,
@@ -106,20 +108,30 @@ export async function POST(req: Request) {
     const batch = parsed.slice(i, i + BATCH);
     const { error } = await admin.from('programs').upsert(
       batch.map((p) => ({
-        external_id:       p.external_id,
-        source:            p.source,
-        title:             p.title,
-        managing_org:      p.managing_org,
-        category:          p.category,
-        support_type:      p.support_type,
-        target_regions:    p.target_regions,
-        application_start: p.application_start,
-        application_end:   p.application_end,
-        status:            p.status,
-        description:       p.description,
-        detail_url:        p.detail_url,
-        raw_data:          p.raw_data,
-        last_synced_at:    p.last_synced_at,
+        external_id:          p.external_id,
+        source:               p.source,
+        title:                p.title,
+        managing_org:         p.managing_org,
+        category:             p.category,
+        support_type:         p.support_type,
+        target_regions:       p.target_regions,
+        target_industries:    p.target_industries,
+        target_company_size:  p.target_company_size,
+        min_employee_count:   p.min_employee_count,
+        max_employee_count:   p.max_employee_count,
+        min_company_age:      p.min_company_age,
+        max_company_age:      p.max_company_age,
+        funding_amount_min:   p.funding_amount_min,
+        funding_amount_max:   p.funding_amount_max,
+        self_funding_ratio:   p.self_funding_ratio,
+        application_start:    p.application_start,
+        application_end:      p.application_end,
+        status:               p.status,
+        description:          p.description,
+        eligibility_summary:  p.eligibility_summary,
+        detail_url:           p.detail_url,
+        raw_data:             p.raw_data,
+        last_synced_at:       p.last_synced_at,
       })),
       { onConflict: 'external_id', ignoreDuplicates: false },
     );
@@ -130,7 +142,46 @@ export async function POST(req: Request) {
     }
   }
 
-  // ── 5. 마감 처리 (소스별) ────────────────────────────────────────────────
+  // ── 5. Bizinfo 상세 API 보강 ─────────────────────────────────────────────
+  // eligibility_summary 또는 target_company_size가 비어있는 신규 bizinfo 프로그램만 대상
+  // (rate limit 방지: 최대 30건, 순차 처리)
+  let enriched = 0;
+  if (process.env.BIZINFO_API_KEY) {
+    const needsEnrich = bizinfoItems
+      .map(parseBizinfoItem)
+      .filter(p => !p.eligibility_summary || p.target_company_size.length === 0)
+      .slice(0, 30);
+
+    for (const base of needsEnrich) {
+      const pblancId = base.external_id.replace('bizinfo_', '');
+      const detail = await fetchBizinfoDetail(pblancId);
+      if (!detail) continue;
+
+      const enriched_p = enrichWithDetail(base, detail);
+
+      // 보강된 필드만 업데이트 (description, eligibility_summary, target_*, funding_* 등)
+      await admin.from('programs').update({
+        description:          enriched_p.description,
+        eligibility_summary:  enriched_p.eligibility_summary,
+        target_company_size:  enriched_p.target_company_size,
+        target_industries:    enriched_p.target_industries,
+        funding_amount_min:   enriched_p.funding_amount_min,
+        funding_amount_max:   enriched_p.funding_amount_max,
+        min_employee_count:   enriched_p.min_employee_count,
+        max_employee_count:   enriched_p.max_employee_count,
+        min_company_age:      enriched_p.min_company_age,
+        max_company_age:      enriched_p.max_company_age,
+        self_funding_ratio:   enriched_p.self_funding_ratio,
+        last_synced_at:       new Date().toISOString(),
+      }).eq('external_id', base.external_id);
+
+      enriched++;
+      // 과도한 API 호출 방지 (100ms 간격)
+      await new Promise(r => setTimeout(r, 100));
+    }
+  }
+
+  // ── 6. 마감 처리 (소스별) ────────────────────────────────────────────────
   let closed = 0;
 
   const sourceIdMap: Record<string, string[]> = {
@@ -238,7 +289,7 @@ export async function POST(req: Request) {
     `bizinfo=${bizinfoItems.length} datagokr=${datagokrItems.length} ` +
     `kstartup=${kstartupItems.length} ` +
     `seoul=${localGovData.counts.seoul ?? 0} gyeonggi=${localGovData.counts.gyeonggi ?? 0} busan=${localGovData.counts.busan ?? 0} ` +
-    `upserted=${upserted} closed=${closed} recurringLinked=${recurringLinked} expectedPromoted=${expectedPromoted}`,
+    `upserted=${upserted} enriched=${enriched} closed=${closed} recurringLinked=${recurringLinked} expectedPromoted=${expectedPromoted}`,
   );
 
   return NextResponse.json({
@@ -253,6 +304,7 @@ export async function POST(req: Request) {
     },
     fetched:          totalFetched,
     upserted,
+    enriched,
     closed,
     recurringLinked,
     expectedPromoted,

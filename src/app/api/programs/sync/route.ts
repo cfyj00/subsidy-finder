@@ -19,6 +19,8 @@ import { createSupabaseAdmin } from '@/lib/supabase-admin';
 import {
   fetchAllOpenPrograms,
   parseBizinfoItem,
+  fetchBizinfoDetail,
+  enrichWithDetail,
 } from '@/lib/data/bizinfo-client';
 import {
   fetchAllMssBizPrograms,
@@ -51,7 +53,7 @@ export async function POST(req: Request) {
   }
 
   // ── 3. 데이터 수집 (Bizinfo + data.go.kr 병렬) ──────────────────────────
-  const results = { bizinfo: 0, datagokr: 0, upserted: 0, closed: 0, errors: [] as string[] };
+  const results = { bizinfo: 0, datagokr: 0, upserted: 0, enriched: 0, closed: 0, errors: [] as string[] };
 
   const [bizinfoResult, datagokrResult] = await Promise.allSettled([
     fetchAllOpenPrograms({ maxPages: 10, includeUpcoming: true }),
@@ -87,20 +89,30 @@ export async function POST(req: Request) {
     const batch = parsed.slice(i, i + BATCH);
     const { error } = await admin.from('programs').upsert(
       batch.map((p) => ({
-        external_id:        p.external_id,
-        source:             p.source,
-        title:              p.title,
-        managing_org:       p.managing_org,
-        category:           p.category,
-        support_type:       p.support_type,
-        target_regions:     p.target_regions,
-        application_start:  p.application_start,
-        application_end:    p.application_end,
-        status:             p.status,
-        description:        p.description,
-        detail_url:         p.detail_url,
-        raw_data:           p.raw_data,
-        last_synced_at:     p.last_synced_at,
+        external_id:          p.external_id,
+        source:               p.source,
+        title:                p.title,
+        managing_org:         p.managing_org,
+        category:             p.category,
+        support_type:         p.support_type,
+        target_regions:       p.target_regions,
+        target_industries:    p.target_industries,
+        target_company_size:  p.target_company_size,
+        min_employee_count:   p.min_employee_count,
+        max_employee_count:   p.max_employee_count,
+        min_company_age:      p.min_company_age,
+        max_company_age:      p.max_company_age,
+        funding_amount_min:   p.funding_amount_min,
+        funding_amount_max:   p.funding_amount_max,
+        self_funding_ratio:   p.self_funding_ratio,
+        application_start:    p.application_start,
+        application_end:      p.application_end,
+        status:               p.status,
+        description:          p.description,
+        eligibility_summary:  p.eligibility_summary,
+        detail_url:           p.detail_url,
+        raw_data:             p.raw_data,
+        last_synced_at:       p.last_synced_at,
       })),
       { onConflict: 'external_id', ignoreDuplicates: false },
     );
@@ -111,7 +123,39 @@ export async function POST(req: Request) {
     }
   }
 
-  // ── 6. 마감된 프로그램 상태 업데이트 (소스별) ────────────────────────────
+  // ── 6. Bizinfo 상세 API 보강 (수동 sync에도 적용) ────────────────────────
+  results.enriched = 0;
+  if (process.env.BIZINFO_API_KEY) {
+    const needsEnrich = bizinfoItems
+      .map(parseBizinfoItem)
+      .filter(p => !p.eligibility_summary || p.target_company_size.length === 0)
+      .slice(0, 20);
+
+    for (const base of needsEnrich) {
+      const pblancId = base.external_id.replace('bizinfo_', '');
+      const detail = await fetchBizinfoDetail(pblancId);
+      if (!detail) continue;
+      const enriched_p = enrichWithDetail(base, detail);
+      await admin.from('programs').update({
+        description:         enriched_p.description,
+        eligibility_summary: enriched_p.eligibility_summary,
+        target_company_size: enriched_p.target_company_size,
+        target_industries:   enriched_p.target_industries,
+        funding_amount_min:  enriched_p.funding_amount_min,
+        funding_amount_max:  enriched_p.funding_amount_max,
+        min_employee_count:  enriched_p.min_employee_count,
+        max_employee_count:  enriched_p.max_employee_count,
+        min_company_age:     enriched_p.min_company_age,
+        max_company_age:     enriched_p.max_company_age,
+        self_funding_ratio:  enriched_p.self_funding_ratio,
+        last_synced_at:      new Date().toISOString(),
+      }).eq('external_id', base.external_id);
+      results.enriched++;
+      await new Promise(r => setTimeout(r, 100));
+    }
+  }
+
+  // ── 7. 마감된 프로그램 상태 업데이트 (소스별) ────────────────────────────
   const bizinfoIds  = bizinfoItems.map(parseBizinfoItem).map(p => p.external_id);
   const datagokrIds = datagokrItems.map(parseDataGoKrItem).map(p => p.external_id);
 

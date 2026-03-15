@@ -15,6 +15,7 @@
  */
 
 import type { ParsedProgram } from './bizinfo-client';
+import { extractProgramDetails } from './utils';
 
 // ── 타입 ────────────────────────────────────────────────────────────────────
 
@@ -160,20 +161,35 @@ export async function fetchAllGov24Programs(options?: {
 // ── Gov24ServiceItem → ParsedProgram 변환 ───────────────────────────────────
 
 export function parseGov24Item(item: Gov24ServiceItem): ParsedProgram {
+  const desc     = item.지원내용 || item.서비스목적 || null;
+  const extracted = extractProgramDetails(desc);
+
   return {
-    external_id:       `gov24_${item.서비스ID}`,
-    source:            'gov24',
-    title:             item.서비스명,
-    managing_org:      item.소관기관명 || null,
-    category:          guessCategory(item),
-    support_type:      normalizeSupportType(item.지원유형),
-    target_regions:    [],          // gov24는 지역 필드 없음 (전국 사업)
-    application_start: null,        // 보조금24는 상시 신청 위주
-    application_end:   item.신청기한 !== '상시' ? item.신청기한 : null,
-    status:            calcStatus(item.신청기한),
-    description:       item.지원내용 || item.서비스목적 || null,
-    detail_url:        item.서비스URL || null,
-    raw_data:          item as unknown as Record<string, unknown>,
-    last_synced_at:    new Date().toISOString(),
+    external_id:          `gov24_${item.서비스ID}`,
+    source:               'gov24',
+    title:                item.서비스명,
+    managing_org:         item.소관기관명 || null,
+    category:             guessCategory(item),
+    support_type:         normalizeSupportType(item.지원유형),
+    target_regions:       [],
+    target_industries:    extracted.target_industries,
+    target_company_size:  extracted.target_company_size,
+    min_employee_count:   extracted.min_employee_count,
+    max_employee_count:   extracted.max_employee_count,
+    min_revenue:          null,
+    max_revenue:          null,
+    min_company_age:      extracted.min_company_age,
+    max_company_age:      extracted.max_company_age,
+    funding_amount_min:   extracted.funding_amount_min,
+    funding_amount_max:   extracted.funding_amount_max,
+    self_funding_ratio:   extracted.self_funding_ratio,
+    application_start:    null,
+    application_end:      item.신청기한 !== '상시' ? item.신청기한 : null,
+    status:               calcStatus(item.신청기한),
+    description:          desc,
+    eligibility_summary:  extracted.eligibility_summary,
+    detail_url:           item.서비스URL || null,
+    raw_data:             item as unknown as Record<string, unknown>,
+    last_synced_at:       new Date().toISOString(),
   };
 }

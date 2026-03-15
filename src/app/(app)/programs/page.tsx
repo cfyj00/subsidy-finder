@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { getSupabaseBrowser } from '@/lib/supabase-browser';
 import { useProfile } from '@/lib/profile-context';
 import { useBusinessProfile } from '@/lib/business-profile-context';
@@ -19,6 +20,7 @@ import { matchesSearch } from '@/lib/search-keywords';
 import { stripHtml } from '@/lib/data/utils';
 
 export default function ProgramsPage() {
+  const router = useRouter();
   const { profile } = useProfile();
   const { activeProfile: businessProfile } = useBusinessProfile();
   const [programs, setPrograms] = useState<Program[]>([]);
@@ -103,6 +105,28 @@ export default function ProgramsPage() {
     setSeedMsg(data.message);
     setSeedLoading(false);
     setTimeout(() => { setSeedMsg(''); loadData(); }, 2000);
+  };
+
+  // ── 스크롤 위치 복원 (뒤로가기) ────────────────────────────────────────────
+  useEffect(() => {
+    const flag = sessionStorage.getItem('programs-from-detail');
+    if (!flag) return;
+    sessionStorage.removeItem('programs-from-detail');
+    const pos = parseInt(sessionStorage.getItem('programs-scroll') || '0');
+    if (!pos) return;
+    const id = setInterval(() => {
+      if (document.documentElement.scrollHeight > pos + window.innerHeight * 0.5) {
+        clearInterval(id);
+        window.scrollTo(0, pos);
+      }
+    }, 50);
+    setTimeout(() => clearInterval(id), 3000);
+  }, []);
+
+  const saveScroll = (programId: string) => {
+    sessionStorage.setItem('programs-scroll', String(window.scrollY));
+    sessionStorage.setItem('programs-from-detail', '1');
+    router.push(`/programs/${programId}`);
   };
 
   const getMatchScore = (programId: string) => {
@@ -219,13 +243,14 @@ export default function ProgramsPage() {
         </div>
       )}
 
-      {/* Search + Filter bar */}
-      <div className="flex gap-2 mb-4">
-        <div className="flex-1 relative">
+      {/* Search + Filter bar — 2줄 (모바일 최적화) */}
+      <div className="flex flex-col gap-2 mb-4">
+        {/* 1줄: 검색창 */}
+        <div className="relative">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-            placeholder="창업, 수출, R&D, 스마트팩토리, 인력 등 키워드 검색..."
-            className="w-full pl-9 pr-4 py-2.5 border border-gray-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            placeholder="창업, 수출, R&D, 스마트팩토리, 인력 등..."
+            className="w-full pl-9 pr-8 py-2.5 border border-gray-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
           {searchQuery && (
             <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
@@ -234,43 +259,46 @@ export default function ProgramsPage() {
           )}
         </div>
 
-        {/* 내사업검색 버튼 */}
-        <button
-          onClick={() => setFilterMyBusiness(!filterMyBusiness)}
-          className={`flex items-center gap-1.5 px-3 py-2.5 border rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
-            filterMyBusiness
-              ? 'bg-emerald-600 border-emerald-600 text-white'
-              : 'border-gray-300 dark:border-slate-600 text-gray-600 dark:text-gray-300 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700'
-          }`}
-        >
-          <Sparkles size={15} />
-          내사업검색
-        </button>
+        {/* 2줄: 버튼들 */}
+        <div className="flex gap-2">
+          {/* 내사업검색 버튼 */}
+          <button
+            onClick={() => setFilterMyBusiness(!filterMyBusiness)}
+            className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 border rounded-lg text-sm font-medium transition-colors ${
+              filterMyBusiness
+                ? 'bg-emerald-600 border-emerald-600 text-white'
+                : 'border-gray-300 dark:border-slate-600 text-gray-600 dark:text-gray-300 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700'
+            }`}
+          >
+            <Sparkles size={14} />
+            내사업검색
+          </button>
 
-        {/* 북마크 버튼 */}
-        <button
-          onClick={() => setFilterBookmarked(!filterBookmarked)}
-          className={`flex items-center gap-1.5 px-3 py-2.5 border rounded-lg text-sm font-medium transition-colors ${
-            filterBookmarked
-              ? 'bg-amber-500 border-amber-500 text-white'
-              : 'border-gray-300 dark:border-slate-600 text-gray-600 dark:text-gray-300 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700'
-          }`}
-        >
-          <BookmarkCheck size={15} />
-          {filterBookmarked ? `${bookmarkCount}` : '북마크'}
-        </button>
+          {/* 북마크 버튼 */}
+          <button
+            onClick={() => setFilterBookmarked(!filterBookmarked)}
+            className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 border rounded-lg text-sm font-medium transition-colors ${
+              filterBookmarked
+                ? 'bg-amber-500 border-amber-500 text-white'
+                : 'border-gray-300 dark:border-slate-600 text-gray-600 dark:text-gray-300 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700'
+            }`}
+          >
+            <BookmarkCheck size={14} />
+            {filterBookmarked ? `북마크 ${bookmarkCount}` : '북마크'}
+          </button>
 
-        {/* 필터 버튼 */}
-        <button
-          onClick={() => setShowFilters(!showFilters)}
-          className={`flex items-center gap-1.5 px-3 py-2.5 border rounded-lg text-sm font-medium transition-colors ${
-            showFilters
-              ? 'bg-indigo-600 border-indigo-600 text-white'
-              : 'border-gray-300 dark:border-slate-600 text-gray-600 dark:text-gray-300 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700'
-          }`}
-        >
-          <Filter size={15} /> 필터
-        </button>
+          {/* 필터 버튼 */}
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 border rounded-lg text-sm font-medium transition-colors ${
+              showFilters
+                ? 'bg-indigo-600 border-indigo-600 text-white'
+                : 'border-gray-300 dark:border-slate-600 text-gray-600 dark:text-gray-300 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700'
+            }`}
+          >
+            <Filter size={14} /> 필터
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -389,7 +417,8 @@ export default function ProgramsPage() {
 
             return (
               <div key={program.id}
-                className={`bg-white dark:bg-slate-800 border rounded-xl p-4 transition-colors hover:border-indigo-300 dark:hover:border-indigo-700 ${
+                onClick={() => saveScroll(program.id)}
+                className={`relative bg-white dark:bg-slate-800 border rounded-xl p-4 transition-colors cursor-pointer hover:border-indigo-300 dark:hover:border-indigo-700 active:bg-gray-50 dark:active:bg-slate-700/50 ${
                   filterMyBusiness && score !== null && score >= 80
                     ? 'border-emerald-300 dark:border-emerald-700'
                     : 'border-gray-200 dark:border-slate-700'
@@ -408,11 +437,9 @@ export default function ProgramsPage() {
                         <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">D-{daysLeft}</span>
                       )}
                     </div>
-                    <Link href={`/programs/${program.id}`} className="group">
-                      <h3 className="font-semibold text-gray-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors line-clamp-2">
-                        {program.title}
-                      </h3>
-                    </Link>
+                    <h3 className="text-base font-semibold text-gray-900 dark:text-white line-clamp-2 leading-snug">
+                      {program.title}
+                    </h3>
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                       {isPersonName(program.managing_org)
                         ? `${program.implementing_org ? program.implementing_org + ' · ' : ''}작성자: ${program.managing_org}`
@@ -452,15 +479,11 @@ export default function ProgramsPage() {
                         <div className="text-xs text-gray-400">{matchInfo.label}</div>
                       </div>
                     )}
-                    <div className="flex gap-1">
-                      <button onClick={() => toggleBookmark(program.id)}
-                        className={`p-1.5 rounded-lg transition-colors ${bookmarked ? 'text-amber-500 hover:text-amber-600' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'}`}>
-                        {bookmarked ? <BookmarkCheck size={18} /> : <Bookmark size={18} />}
-                      </button>
-                      <Link href={`/programs/${program.id}`} className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">
-                        <ChevronRight size={18} />
-                      </Link>
-                    </div>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); toggleBookmark(program.id); }}
+                      className={`p-1.5 rounded-lg transition-colors ${bookmarked ? 'text-amber-500 hover:text-amber-600' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'}`}>
+                      {bookmarked ? <BookmarkCheck size={18} /> : <Bookmark size={18} />}
+                    </button>
                   </div>
                 </div>
               </div>

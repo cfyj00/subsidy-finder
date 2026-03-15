@@ -417,16 +417,44 @@ function ConsultantContent() {
           program,
         ));
       }
-    } else {
-      const { data: progs } = await supabase
-        .from('programs').select('*').in('status', ['open', 'always']).order('is_featured', { ascending: false });
+    } else if (businessProfile) {
+      // 저장된 매칭 점수 상위 10개 로드 (전체 프로그램 fetch 방지)
+      const { data: savedMatches } = await supabase
+        .from('user_program_matches')
+        .select('*, programs(*)')
+        .eq('user_id', user.id)
+        .order('match_score', { ascending: false })
+        .limit(10);
 
-      if (businessProfile && progs && progs.length > 0) {
-        const programs = progs as Program[];
-        const scored: MatchInfo[] = programs
-          .map((p) => { const r = calculateMatch(businessProfile, p); return { program: p, score: r.score, reasons: r.reasons }; })
-          .sort((a, b) => b.score - a.score)
-          .slice(0, 5);
+      let scored: MatchInfo[] = [];
+
+      if (savedMatches && savedMatches.length >= 3) {
+        // 저장된 점수 활용 (빠른 경로)
+        scored = savedMatches
+          .filter((m) => m.programs && (m.programs as Program).status !== 'closed')
+          .slice(0, 5)
+          .map((m) => {
+            const p = m.programs as Program;
+            const r = calculateMatch(businessProfile, p);
+            return { program: p, score: m.match_score ?? r.score, reasons: r.reasons };
+          });
+      } else {
+        // 저장된 점수가 없으면 최신 공모 100건만 가져와 계산
+        const { data: progs } = await supabase
+          .from('programs').select('*')
+          .in('status', ['open', 'always'])
+          .order('is_featured', { ascending: false })
+          .limit(100);
+
+        if (progs && progs.length > 0) {
+          scored = (progs as Program[])
+            .map((p) => { const r = calculateMatch(businessProfile, p); return { program: p, score: r.score, reasons: r.reasons }; })
+            .sort((a, b) => b.score - a.score)
+            .slice(0, 5);
+        }
+      }
+
+      if (scored.length > 0) {
         setTopMatches(scored);
         setConsultingPrompt(generateConsultingPrompt(businessProfile, scored));
       }

@@ -11,7 +11,7 @@
  */
 
 import type { ParsedProgram } from './bizinfo-client';
-import { stripHtml } from './utils';
+import { stripHtml, extractProgramDetails } from './utils';
 
 // ── 타입 ───────────────────────────────────────────────────────────────────
 
@@ -178,23 +178,37 @@ export async function fetchAllMssBizPrograms(options?: {
 // ── DataGoKrItem → ParsedProgram 변환 ─────────────────────────────────────
 
 export function parseDataGoKrItem(item: DataGoKrItem): ParsedProgram {
-  const start = item.applicationStartDate || null;
-  const end   = item.applicationEndDate   || null;
+  const start     = item.applicationStartDate || null;
+  const end       = item.applicationEndDate   || null;
+  const cleanDesc = stripHtml(item.dataContents);
+  const extracted = extractProgramDetails(cleanDesc);
 
   return {
-    external_id:       `datagokr_${item.itemId}`,
-    source:            'datagokr',
-    title:             item.title,
-    managing_org:      '중소벤처기업부',   // writerName은 개인 이름 → 소스 기관명으로 고정
-    category:          guessCategory(item.title, item.dataContents),
-    support_type:      null,
-    target_regions:    [],
-    application_start: start,
-    application_end:   end,
-    status:            calcStatus(start, end),
-    description:       stripHtml(item.dataContents),
-    detail_url:        item.viewUrl || null,
-    raw_data:          item as unknown as Record<string, unknown>,
-    last_synced_at:    new Date().toISOString(),
+    external_id:          `datagokr_${item.itemId}`,
+    source:               'datagokr',
+    title:                item.title,
+    managing_org:         '중소벤처기업부',
+    category:             guessCategory(item.title, item.dataContents),
+    support_type:         null,
+    target_regions:       [],
+    target_industries:    extracted.target_industries,
+    target_company_size:  extracted.target_company_size,
+    min_employee_count:   extracted.min_employee_count,
+    max_employee_count:   extracted.max_employee_count,
+    min_revenue:          null,
+    max_revenue:          null,
+    min_company_age:      extracted.min_company_age,
+    max_company_age:      extracted.max_company_age,
+    funding_amount_min:   extracted.funding_amount_min,
+    funding_amount_max:   extracted.funding_amount_max,
+    self_funding_ratio:   extracted.self_funding_ratio,
+    application_start:    start,
+    application_end:      end,
+    status:               calcStatus(start, end),
+    description:          cleanDesc,
+    eligibility_summary:  extracted.eligibility_summary,
+    detail_url:           item.viewUrl || null,
+    raw_data:             item as unknown as Record<string, unknown>,
+    last_synced_at:       new Date().toISOString(),
   };
 }

@@ -21,7 +21,7 @@
  */
 
 import type { ParsedProgram } from './bizinfo-client';
-import { stripHtml } from './utils';
+import { stripHtml, extractProgramDetails } from './utils';
 
 // ── 공통 유틸 ────────────────────────────────────────────────────────────────
 
@@ -96,21 +96,35 @@ async function fetchSeoulPrograms(): Promise<ParsedProgram[]> {
       const status = calcStatus(start, end);
       if (status === 'closed') continue;
 
+      const seoulDesc    = stripHtml(item.BIZ_CN);
+      const seoulDetails = extractProgramDetails(seoulDesc);
       results.push({
-        external_id:       `seoul_${item.BIZ_CD ?? item.BIZ_NM.slice(0,20).replace(/\s/g,'_')}`,
-        source:            'seoul',
-        title:             item.BIZ_NM,
-        managing_org:      item.AGENCY_NM || '서울특별시',
-        category:          guessCategory(`${item.BIZ_NM} ${item.BIZ_CN ?? ''}`),
-        support_type:      null,
-        target_regions:    ['서울특별시'],
-        application_start: start,
-        application_end:   end,
+        external_id:          `seoul_${item.BIZ_CD ?? item.BIZ_NM.slice(0,20).replace(/\s/g,'_')}`,
+        source:               'seoul',
+        title:                item.BIZ_NM,
+        managing_org:         item.AGENCY_NM || '서울특별시',
+        category:             guessCategory(`${item.BIZ_NM} ${item.BIZ_CN ?? ''}`),
+        support_type:         null,
+        target_regions:       ['서울특별시'],
+        target_industries:    seoulDetails.target_industries,
+        target_company_size:  seoulDetails.target_company_size,
+        min_employee_count:   seoulDetails.min_employee_count,
+        max_employee_count:   seoulDetails.max_employee_count,
+        min_revenue:          null,
+        max_revenue:          null,
+        min_company_age:      seoulDetails.min_company_age,
+        max_company_age:      seoulDetails.max_company_age,
+        funding_amount_min:   seoulDetails.funding_amount_min,
+        funding_amount_max:   seoulDetails.funding_amount_max,
+        self_funding_ratio:   seoulDetails.self_funding_ratio,
+        application_start:    start,
+        application_end:      end,
         status,
-        description:       stripHtml(item.BIZ_CN),
-        detail_url:        item.APPLY_URL || 'https://biz.seoul.go.kr',
-        raw_data:          item as unknown as Record<string, unknown>,
-        last_synced_at:    new Date().toISOString(),
+        description:          seoulDesc,
+        eligibility_summary:  seoulDetails.eligibility_summary,
+        detail_url:           item.APPLY_URL || 'https://biz.seoul.go.kr',
+        raw_data:             item as unknown as Record<string, unknown>,
+        last_synced_at:       new Date().toISOString(),
       });
     }
   } catch (e) {
@@ -158,21 +172,35 @@ async function fetchGyeonggiPrograms(): Promise<ParsedProgram[]> {
       const region  = item.SIGUN_NM ? `경기도 ${item.SIGUN_NM}` : '경기도';
       const safeKey = `${item.OPNNG_INSTT_NM ?? ''}_${title}`.slice(0, 30).replace(/\s/g, '_');
 
+      const ggDesc    = stripHtml(item.SFRND_DETAIL_CN);
+      const ggDetails = extractProgramDetails(ggDesc);
       results.push({
-        external_id:       `gyeonggi_${safeKey}`,
-        source:            'gyeonggi',
+        external_id:          `gyeonggi_${safeKey}`,
+        source:               'gyeonggi',
         title,
-        managing_org:      item.OPNNG_INSTT_NM || '경기도',
-        category:          guessCategory(`${title} ${item.SFRND_DETAIL_CN ?? ''}`),
-        support_type:      null,
-        target_regions:    [region],
-        application_start: start,
-        application_end:   end,
+        managing_org:         item.OPNNG_INSTT_NM || '경기도',
+        category:             guessCategory(`${title} ${item.SFRND_DETAIL_CN ?? ''}`),
+        support_type:         null,
+        target_regions:       [region],
+        target_industries:    ggDetails.target_industries,
+        target_company_size:  ggDetails.target_company_size,
+        min_employee_count:   ggDetails.min_employee_count,
+        max_employee_count:   ggDetails.max_employee_count,
+        min_revenue:          null,
+        max_revenue:          null,
+        min_company_age:      ggDetails.min_company_age,
+        max_company_age:      ggDetails.max_company_age,
+        funding_amount_min:   ggDetails.funding_amount_min,
+        funding_amount_max:   ggDetails.funding_amount_max,
+        self_funding_ratio:   ggDetails.self_funding_ratio,
+        application_start:    start,
+        application_end:      end,
         status,
-        description:       stripHtml(item.SFRND_DETAIL_CN),
-        detail_url:        item.LINK_URL || 'https://www.gg.go.kr',
-        raw_data:          item as unknown as Record<string, unknown>,
-        last_synced_at:    new Date().toISOString(),
+        description:          ggDesc,
+        eligibility_summary:  ggDetails.eligibility_summary,
+        detail_url:           item.LINK_URL || 'https://www.gg.go.kr',
+        raw_data:             item as unknown as Record<string, unknown>,
+        last_synced_at:       new Date().toISOString(),
       });
     }
   } catch (e) {
@@ -218,21 +246,35 @@ async function fetchBusanPrograms(): Promise<ParsedProgram[]> {
       const status = calcStatus(start, end);
       if (status === 'closed') continue;
 
+      const busanDesc    = stripHtml(item.BIZ_SUMRY_CN);
+      const busanDetails = extractProgramDetails(busanDesc);
       results.push({
-        external_id:       `busan_${item.BIZ_ID ?? title.slice(0,20).replace(/\s/g,'_')}`,
-        source:            'busan',
+        external_id:          `busan_${item.BIZ_ID ?? title.slice(0,20).replace(/\s/g,'_')}`,
+        source:               'busan',
         title,
-        managing_org:      item.JRSD_INSTT_NM || '부산광역시',
-        category:          guessCategory(`${title} ${item.BIZ_SUMRY_CN ?? ''}`),
-        support_type:      null,
-        target_regions:    ['부산광역시'],
-        application_start: start,
-        application_end:   end,
+        managing_org:         item.JRSD_INSTT_NM || '부산광역시',
+        category:             guessCategory(`${title} ${item.BIZ_SUMRY_CN ?? ''}`),
+        support_type:         null,
+        target_regions:       ['부산광역시'],
+        target_industries:    busanDetails.target_industries,
+        target_company_size:  busanDetails.target_company_size,
+        min_employee_count:   busanDetails.min_employee_count,
+        max_employee_count:   busanDetails.max_employee_count,
+        min_revenue:          null,
+        max_revenue:          null,
+        min_company_age:      busanDetails.min_company_age,
+        max_company_age:      busanDetails.max_company_age,
+        funding_amount_min:   busanDetails.funding_amount_min,
+        funding_amount_max:   busanDetails.funding_amount_max,
+        self_funding_ratio:   busanDetails.self_funding_ratio,
+        application_start:    start,
+        application_end:      end,
         status,
-        description:       stripHtml(item.BIZ_SUMRY_CN),
-        detail_url:        item.DETAIL_URL || 'https://www.busan.go.kr',
-        raw_data:          item as unknown as Record<string, unknown>,
-        last_synced_at:    new Date().toISOString(),
+        description:          busanDesc,
+        eligibility_summary:  busanDetails.eligibility_summary,
+        detail_url:           item.DETAIL_URL || 'https://www.busan.go.kr',
+        raw_data:             item as unknown as Record<string, unknown>,
+        last_synced_at:       new Date().toISOString(),
       });
     }
   } catch (e) {

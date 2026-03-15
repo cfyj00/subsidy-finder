@@ -11,7 +11,7 @@
  * 기본 엔드포인트: https://www.bizinfo.go.kr/uss/rss/bizinfoApi.do
  */
 
-import { stripHtml } from './utils';
+import { stripHtml, extractProgramDetails } from './utils';
 
 // ─── 응답 타입 ──────────────────────────────────────────────────────────────
 
@@ -265,7 +265,101 @@ export async function fetchAllOpenPrograms(options?: {
   });
 }
 
-// ─── 단건 상세 조회 ────────────────────────────────────────────────────────
+// ─── 상세 API 타입 ────────────────────────────────────────────────────────
+
+export interface BizinfoDetailItem {
+  pblancId:        string;
+  pblancNm:        string;
+  applyTarget?:    string;   // 신청대상
+  sprtCn?:         string;   // 지원내용
+  applyMthd?:      string;   // 신청방법
+  bsnsSumryCn?:    string;   // 사업요약
+  totPblancAmt?:   string;   // 총지원금액
+  sprtAmt?:        string;   // 지원금액
+  reqstDt?:        string;   // 신청기간
+  jrsdInsttNm?:    string;
+  bsnsChrgDeptNm?: string;
+  detlUrl?:        string;
+  [key: string]: unknown;
+}
+
+/**
+ * Bizinfo 상세 API 호출
+ * GET /uss/rss/bizinfoApi.do?crtfcKey={key}&pblancId={id}&dataType=json
+ * 실패 시 null 반환 (graceful degradation)
+ */
+export async function fetchBizinfoDetail(pblancId: string): Promise<BizinfoDetailItem | null> {
+  const key = getApiKey();
+  if (!key) return null;
+
+  try {
+    const url = new URL(BIZINFO_BASE);
+    url.searchParams.set('crtfcKey', key);
+    url.searchParams.set('pblancId', pblancId);
+    url.searchParams.set('dataType', 'json');
+
+    const res = await fetch(url.toString(), {
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!res.ok) return null;
+
+    const json = await res.json() as Record<string, unknown>;
+
+    // 응답 구조: { result: {...} } 또는 { resultData: {...} } 또는 배열
+    const detail = (
+      (json.result as BizinfoDetailItem | undefined) ??
+      (json.resultData as BizinfoDetailItem | undefined) ??
+      ((Array.isArray(json.items) ? json.items[0] : null) as BizinfoDetailItem | null)
+    );
+
+    return detail ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 상세 API 데이터로 ParsedProgram 보강
+ * 기존 parsed 값을 덮어쓰지 않고 null/빈 값만 채움
+ */
+export function enrichWithDetail(
+  base: ParsedProgram,
+  detail: BizinfoDetailItem,
+): ParsedProgram {
+  // applyTarget + sprtCn을 합쳐서 더 풍부한 텍스트 생성
+  const extraText = [
+    detail.applyTarget && `신청대상: ${detail.applyTarget}`,
+    detail.sprtCn      && `지원내용: ${detail.sprtCn}`,
+    detail.applyMthd   && `신청방법: ${detail.applyMthd}`,
+  ].filter(Boolean).join('\n');
+
+  if (!extraText) return base;
+
+  const cleanExtra = stripHtml(extraText) ?? '';
+  const extracted  = extractProgramDetails((base.description ?? '') + ' ' + cleanExtra);
+
+  return {
+    ...base,
+    description:         base.description ?? stripHtml(detail.bsnsSumryCn) ?? null,
+    eligibility_summary: base.eligibility_summary ?? extracted.eligibility_summary,
+    target_company_size: base.target_company_size.length > 0
+      ? base.target_company_size
+      : extracted.target_company_size,
+    target_industries:   base.target_industries.length > 0
+      ? base.target_industries
+      : extracted.target_industries,
+    funding_amount_max:  base.funding_amount_max ?? extracted.funding_amount_max,
+    funding_amount_min:  base.funding_amount_min ?? extracted.funding_amount_min,
+    min_employee_count:  base.min_employee_count ?? extracted.min_employee_count,
+    max_employee_count:  base.max_employee_count ?? extracted.max_employee_count,
+    min_company_age:     base.min_company_age    ?? extracted.min_company_age,
+    max_company_age:     base.max_company_age    ?? extracted.max_company_age,
+    self_funding_ratio:  base.self_funding_ratio ?? extracted.self_funding_ratio,
+  };
+}
+
+// ─── 단건 상세 조회 (레거시 - 목록 검색 방식) ─────────────────────────────
 
 export async function fetchProgramDetail(pblancId: string): Promise<BizinfoListItem | null> {
   try {
@@ -279,20 +373,32 @@ export async function fetchProgramDetail(pblancId: string): Promise<BizinfoListI
 // ─── BizinfoListItem → programs 테이블 행 변환 ───────────────────────────
 
 export interface ParsedProgram {
-  external_id:         string;
-  source:              string;
-  title:               string;
-  managing_org:        string | null;
-  category:            string;
-  support_type:        string | null;
-  target_regions:      string[];
-  application_start:   string | null;
-  application_end:     string | null;
-  status:              'open' | 'upcoming' | 'closed';
-  description:         string | null;
-  detail_url:          string | null;
-  raw_data:            Record<string, unknown>;
-  last_synced_at:      string;
+  external_id:          string;
+  source:               string;
+  title:                string;
+  managing_org:         string | null;
+  category:             string;
+  support_type:         string | null;
+  target_regions:       string[];
+  target_industries:    string[];
+  target_company_size:  string[];
+  min_employee_count:   number | null;
+  max_employee_count:   number | null;
+  min_revenue:          number | null;
+  max_revenue:          number | null;
+  min_company_age:      number | null;
+  max_company_age:      number | null;
+  funding_amount_min:   number | null;
+  funding_amount_max:   number | null;
+  self_funding_ratio:   number | null;
+  application_start:    string | null;
+  application_end:      string | null;
+  status:               'open' | 'upcoming' | 'closed';
+  description:          string | null;
+  eligibility_summary:  string | null;
+  detail_url:           string | null;
+  raw_data:             Record<string, unknown>;
+  last_synced_at:       string;
 }
 
 export function parseBizinfoItem(item: BizinfoListItem): ParsedProgram {
@@ -315,20 +421,35 @@ export function parseBizinfoItem(item: BizinfoListItem): ParsedProgram {
     ? (item.bsnsChrgDeptNm || item.jrsdInsttNm || null)
     : (item.jrsdInsttNm || null);
 
+  const cleanDesc = stripHtml(item.bsnsSumryCn);
+  const extracted = extractProgramDetails(cleanDesc);
+
   return {
-    external_id:       `bizinfo_${item.pblancId}`,
-    source:            'bizinfo',
-    title:             item.pblancNm,
-    managing_org:      managingOrg,
-    category:          guessCategory(item),
-    support_type:      null,
-    target_regions:    regions,
-    application_start: start,
-    application_end:   end,
-    status:            mapStatus(item.pgmSttusNm, start, end),
-    description:       stripHtml(item.bsnsSumryCn),  // HTML 태그 제거
-    detail_url:        item.detlUrl ?? `https://www.bizinfo.go.kr/web/pgm/pgm030/view.do?pblancId=${item.pblancId}`,
-    raw_data:          item as unknown as Record<string, unknown>,
-    last_synced_at:    new Date().toISOString(),
+    external_id:          `bizinfo_${item.pblancId}`,
+    source:               'bizinfo',
+    title:                item.pblancNm,
+    managing_org:         managingOrg,
+    category:             guessCategory(item),
+    support_type:         null,
+    target_regions:       regions,
+    target_industries:    extracted.target_industries,
+    target_company_size:  extracted.target_company_size,
+    min_employee_count:   extracted.min_employee_count,
+    max_employee_count:   extracted.max_employee_count,
+    min_revenue:          null,
+    max_revenue:          null,
+    min_company_age:      extracted.min_company_age,
+    max_company_age:      extracted.max_company_age,
+    funding_amount_min:   extracted.funding_amount_min,
+    funding_amount_max:   extracted.funding_amount_max,
+    self_funding_ratio:   extracted.self_funding_ratio,
+    application_start:    start,
+    application_end:      end,
+    status:               mapStatus(item.pgmSttusNm, start, end),
+    description:          cleanDesc,
+    eligibility_summary:  extracted.eligibility_summary,
+    detail_url:           item.detlUrl ?? `https://www.bizinfo.go.kr/web/pgm/pgm030/view.do?pblancId=${item.pblancId}`,
+    raw_data:             item as unknown as Record<string, unknown>,
+    last_synced_at:       new Date().toISOString(),
   };
 }

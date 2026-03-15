@@ -15,7 +15,7 @@
  */
 
 import type { ParsedProgram } from './bizinfo-client';
-import { stripHtml } from './utils';
+import { stripHtml, extractProgramDetails } from './utils';
 
 // ── 타입 ────────────────────────────────────────────────────────────────────
 
@@ -217,23 +217,37 @@ function parseRegions(raw?: string): string[] {
 // ── KStartupItem → ParsedProgram 변환 ───────────────────────────────────────
 
 export function parseKStartupItem(item: KStartupItem): ParsedProgram {
-  const start = item.pbanc_rcpt_bgng_dt || null;
-  const end   = item.pbanc_rcpt_end_dt  || null;
+  const start    = item.pbanc_rcpt_bgng_dt || null;
+  const end      = item.pbanc_rcpt_end_dt  || null;
+  const rawDesc  = stripHtml(item.aply_trgt_ctnt);
+  const extracted = extractProgramDetails(rawDesc);
 
   return {
-    external_id:       `kstartup_${item.pbanc_sn}`,
-    source:            'kstartup',
-    title:             item.biz_pbanc_nm,
-    managing_org:      item.jrsd_instt_nm || '창업진흥원',
-    category:          guessCategory(item),
-    support_type:      null,
-    target_regions:    parseRegions(item.supt_regin),
-    application_start: start,
-    application_end:   end,
-    status:            calcStatus(item.rcrt_prgs_yn, start, end),
-    description:       stripHtml(item.aply_trgt_ctnt),
-    detail_url:        item.pbanc_url || `https://www.k-startup.go.kr/web/contents/bizpbanc-ongoing.do`,
-    raw_data:          item as unknown as Record<string, unknown>,
-    last_synced_at:    new Date().toISOString(),
+    external_id:          `kstartup_${item.pbanc_sn}`,
+    source:               'kstartup',
+    title:                item.biz_pbanc_nm,
+    managing_org:         item.jrsd_instt_nm || '창업진흥원',
+    category:             guessCategory(item),
+    support_type:         null,
+    target_regions:       parseRegions(item.supt_regin),
+    target_industries:    extracted.target_industries,
+    target_company_size:  extracted.target_company_size,
+    min_employee_count:   extracted.min_employee_count,
+    max_employee_count:   extracted.max_employee_count,
+    min_revenue:          null,
+    max_revenue:          null,
+    min_company_age:      extracted.min_company_age,
+    max_company_age:      extracted.max_company_age,
+    funding_amount_min:   extracted.funding_amount_min,
+    funding_amount_max:   extracted.funding_amount_max,
+    self_funding_ratio:   extracted.self_funding_ratio,
+    application_start:    start,
+    application_end:      end,
+    status:               calcStatus(item.rcrt_prgs_yn, start, end),
+    description:          rawDesc,
+    eligibility_summary:  extracted.eligibility_summary,
+    detail_url:           item.pbanc_url || `https://www.k-startup.go.kr/web/contents/bizpbanc-ongoing.do`,
+    raw_data:             item as unknown as Record<string, unknown>,
+    last_synced_at:       new Date().toISOString(),
   };
 }
