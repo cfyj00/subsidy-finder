@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { getSupabaseBrowser } from '@/lib/supabase-browser';
@@ -134,13 +134,19 @@ export default function ProgramsPage() {
     router.push(`/programs/${programId}`);
   };
 
-  const getMatchScore = (programId: string) => {
+  // 항상 최신 매칭 엔진으로 live 계산 (저장된 구 점수 무시)
+  const liveScores = useMemo(() => {
+    if (!businessProfile) return {} as Record<string, number>;
+    const map: Record<string, number> = {};
+    for (const p of programs) {
+      map[p.id] = calculateMatch(businessProfile, p).score;
+    }
+    return map;
+  }, [businessProfile, programs]);
+
+  const getMatchScore = (programId: string): number | null => {
     if (!businessProfile) return null;
-    const program = programs.find(p => p.id === programId);
-    if (!program) return null;
-    const existing = matches[programId];
-    if (existing) return existing.match_score;
-    return calculateMatch(businessProfile, program).score;
+    return liveScores[programId] ?? null;
   };
 
   const bookmarkCount = Object.values(matches).filter(m => m.is_bookmarked).length;
