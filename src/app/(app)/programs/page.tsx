@@ -12,8 +12,11 @@ import type { Program, UserProgramMatch } from '@/types/database';
 import type { NaverNewsItem } from '@/app/api/naver-news/route';
 import {
   Search, Bookmark, BookmarkCheck,
-  ExternalLink, ChevronRight, Filter, X, Loader2, Newspaper, Sparkles
+  ExternalLink, ChevronRight, Filter, X, Loader2, Newspaper, Sparkles, MapPin,
+  ArrowUpDown, DollarSign, Clock,
 } from 'lucide-react';
+
+type SortBy = 'score' | 'amount' | 'deadline';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { matchesSearch } from '@/lib/search-keywords';
@@ -33,6 +36,8 @@ export default function ProgramsPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [filterBookmarked, setFilterBookmarked] = useState(false);
   const [filterMyBusiness, setFilterMyBusiness] = useState(false);
+  const [sortBy, setSortBy] = useState<SortBy>('score');
+  const [localFirst, setLocalFirst] = useState(false);
   const [seedLoading, setSeedLoading] = useState(false);
   const [seedMsg, setSeedMsg] = useState('');
   // 뉴스
@@ -177,10 +182,39 @@ export default function ProgramsPage() {
     return true;
   });
 
-  // 내사업검색 모드: 점수 높은 순 정렬
-  if (filterMyBusiness && businessProfile) {
-    filteredPrograms = [...filteredPrograms].sort((a, b) => (getMatchScore(b.id) ?? 0) - (getMatchScore(a.id) ?? 0));
-  }
+  // ── 정렬 ────────────────────────────────────────────────────────────────────
+  const isInMyRegion = (p: Program): boolean => {
+    if (!businessProfile) return false;
+    if (p.target_regions.length === 0) return true;
+    if (p.target_regions.some(r => r.includes('전국') || r === '전 지역' || r === '전체')) return true;
+    return p.target_regions.some(r =>
+      (businessProfile.region_sido    && r.includes(businessProfile.region_sido)) ||
+      (businessProfile.region_sigungu && r.includes(businessProfile.region_sigungu))
+    );
+  };
+
+  filteredPrograms = [...filteredPrograms].sort((a, b) => {
+    // 내 지역 우선 (모든 정렬 기준의 1순위)
+    if (localFirst && businessProfile) {
+      const aLocal = isInMyRegion(a);
+      const bLocal = isInMyRegion(b);
+      if (aLocal && !bLocal) return -1;
+      if (!aLocal && bLocal) return 1;
+    }
+    // 정렬 기준
+    if (sortBy === 'amount') {
+      const aAmt = a.funding_amount_max ?? a.funding_amount_min ?? 0;
+      const bAmt = b.funding_amount_max ?? b.funding_amount_min ?? 0;
+      if (bAmt !== aAmt) return bAmt - aAmt;
+    }
+    if (sortBy === 'deadline') {
+      const aEnd = a.application_end ? new Date(a.application_end).getTime() : Infinity;
+      const bEnd = b.application_end ? new Date(b.application_end).getTime() : Infinity;
+      if (aEnd !== bEnd) return aEnd - bEnd;
+    }
+    // 점수순 (기본 + 타이브레이커)
+    return (getMatchScore(b.id) ?? 0) - (getMatchScore(a.id) ?? 0);
+  });
 
   const KOREAN_SURNAMES = '김이박최정강조윤장임한오서신권황안송유홍전고문양손배백노하허심도우남엄채원천방공현함변염석선설마길진봉온형민계';
   const isPersonName = (name: string | null | undefined): boolean => {
@@ -301,10 +335,39 @@ export default function ProgramsPage() {
         </div>
       </div>
 
+      {/* 정렬 바 */}
+      <div className="flex items-center gap-1.5 mb-4 flex-wrap">
+        <span className="text-xs text-gray-400 dark:text-gray-500 mr-0.5">정렬</span>
+        {([
+          { key: 'score',    label: '점수순',   icon: <ArrowUpDown size={11} /> },
+          { key: 'amount',   label: '지원금액순', icon: <DollarSign size={11} /> },
+          { key: 'deadline', label: '마감임박순', icon: <Clock size={11} /> },
+        ] as { key: SortBy; label: string; icon: JSX.Element }[]).map(({ key, label, icon }) => (
+          <button key={key} onClick={() => setSortBy(key)}
+            className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+              sortBy === key
+                ? 'bg-indigo-600 border-indigo-600 text-white'
+                : 'border-gray-300 dark:border-slate-600 text-gray-500 dark:text-gray-400 hover:border-indigo-400'
+            }`}>
+            {icon}{label}
+          </button>
+        ))}
+        {businessProfile && (
+          <button onClick={() => setLocalFirst(!localFirst)}
+            className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ml-auto ${
+              localFirst
+                ? 'bg-sky-600 border-sky-600 text-white'
+                : 'border-gray-300 dark:border-slate-600 text-gray-500 dark:text-gray-400 hover:border-sky-400'
+            }`}>
+            <MapPin size={11} />내 지역 우선
+          </button>
+        )}
+      </div>
+
       {/* Filters */}
       {showFilters && (
         <div className="mb-4 p-4 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl space-y-3">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">카테고리</label>
               <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)}
@@ -325,9 +388,33 @@ export default function ProgramsPage() {
                 <option value="closed">마감</option>
               </select>
             </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">지역</label>
+              <select value={filterRegion} onChange={e => setFilterRegion(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                <option value="all">전국</option>
+                <option value="서울">서울</option>
+                <option value="경기">경기</option>
+                <option value="인천">인천</option>
+                <option value="부산">부산</option>
+                <option value="대구">대구</option>
+                <option value="광주">광주</option>
+                <option value="대전">대전</option>
+                <option value="울산">울산</option>
+                <option value="세종">세종</option>
+                <option value="강원">강원</option>
+                <option value="충북">충북</option>
+                <option value="충남">충남</option>
+                <option value="전북">전북</option>
+                <option value="전남">전남</option>
+                <option value="경북">경북</option>
+                <option value="경남">경남</option>
+                <option value="제주">제주</option>
+              </select>
+            </div>
             <div className="flex items-end">
               <button
-                onClick={() => { setFilterCategory(''); setFilterStatus(''); setFilterRegion('all'); setSearchQuery(''); setFilterBookmarked(false); setFilterMyBusiness(false); }}
+                onClick={() => { setFilterCategory(''); setFilterStatus(''); setFilterRegion('all'); setSearchQuery(''); setFilterBookmarked(false); setFilterMyBusiness(false); setSortBy('score'); setLocalFirst(false); }}
                 className="w-full px-3 py-2 text-sm text-gray-600 dark:text-gray-400 border border-gray-300 dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors">
                 전체 초기화
               </button>

@@ -108,6 +108,19 @@ function exportBonus(profile: BusinessProfile, program: Program): number {
   return /수출|해외|글로벌/.test(text) ? 3 : 0;
 }
 
+// ── 마감 임박 가산점 ──────────────────────────────────────────────────────────
+function deadlineBonus(program: Program): number {
+  if (!program.application_end || program.status === 'closed') return 0;
+  const end = new Date(program.application_end);
+  const now = new Date();
+  const daysLeft = Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  if (daysLeft < 0)  return 0;
+  if (daysLeft <= 7)  return 5;
+  if (daysLeft <= 30) return 3;
+  if (daysLeft <= 60) return 1;
+  return 0;
+}
+
 // ── 메인 계산 함수 ────────────────────────────────────────────────────────────
 export function calculateMatch(profile: BusinessProfile, program: Program): MatchResult {
   let score = 0;
@@ -154,15 +167,33 @@ export function calculateMatch(profile: BusinessProfile, program: Program): Matc
     }
   }
 
-  // 2. 업종 (20점)
+  // 2. 업종 (20점) — 3단계: 완전매칭 20 / 부분매칭 12 / 불일치 0
   if (program.target_industries.length === 0) {
     score += 20;
     reasons.push('업종 제한 없음');
-  } else if (program.target_industries.some(i => i.includes(profile.business_type) || profile.business_type.includes(i))) {
-    score += 20;
-    reasons.push(`${profile.business_type} 대상`);
   } else {
-    mismatches.push(`대상 업종: ${program.target_industries.join(', ')}`);
+    const myType = profile.business_type.toLowerCase();
+    const inds = program.target_industries.map(i => i.toLowerCase());
+    if (inds.some(i => i.includes(myType) || myType.includes(i))) {
+      score += 20;
+      reasons.push(`${profile.business_type} 업종 해당`);
+    } else {
+      // 3글자 이상 부분 문자열 매칭 (예: "소프트웨어" vs "소프트웨어개발")
+      const hasPartial = inds.some(ind => {
+        for (let len = 3; len <= myType.length; len++) {
+          for (let s = 0; s <= myType.length - len; s++) {
+            if (ind.includes(myType.slice(s, s + len))) return true;
+          }
+        }
+        return false;
+      });
+      if (hasPartial) {
+        score += 12;
+        reasons.push(`${profile.business_type} 관련 업종`);
+      } else {
+        mismatches.push(`대상 업종: ${program.target_industries.join(', ')}`);
+      }
+    }
   }
 
   // 3. 직원수 (10점)
@@ -238,6 +269,9 @@ export function calculateMatch(profile: BusinessProfile, program: Program): Matc
 
   // 10. 수출 보너스 (최대 3점)
   score += exportBonus(profile, program);
+
+  // 11. 마감 임박 가산점 (최대 5점) — 타이브레이커 역할
+  score += deadlineBonus(program);
 
   return { score: Math.min(score, 100), reasons, mismatches };
 }
