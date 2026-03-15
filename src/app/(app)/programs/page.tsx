@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { getSupabaseBrowser } from '@/lib/supabase-browser';
@@ -342,7 +342,7 @@ export default function ProgramsPage() {
           { key: 'score',    label: '점수순',   icon: <ArrowUpDown size={11} /> },
           { key: 'amount',   label: '지원금액순', icon: <DollarSign size={11} /> },
           { key: 'deadline', label: '마감임박순', icon: <Clock size={11} /> },
-        ] as { key: SortBy; label: string; icon: JSX.Element }[]).map(({ key, label, icon }) => (
+        ] as { key: SortBy; label: string; icon: React.ReactElement }[]).map(({ key, label, icon }) => (
           <button key={key} onClick={() => setSortBy(key)}
             className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
               sortBy === key
