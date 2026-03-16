@@ -166,18 +166,32 @@ export default function ProgramsPage() {
 
       // 지역 하드 필터: 전국 대상이거나 내 지역 포함한 사업만
       const regions = p.target_regions;
+      const sido    = businessProfile.region_sido;
+      const sigungu = businessProfile.region_sigungu;
+      const LOCAL_SOURCES: Record<string, string> = {
+        seoul: '서울', gyeonggi: '경기', busan: '부산',
+        incheon: '인천', daegu: '대구', daejeon: '대전',
+        gwangju: '광주', ulsan: '울산',
+      };
       if (regions.length > 0) {
         const isNationwide = regions.some(r =>
           r.includes('전국') || r.includes('전 지역') || r === '전체'
         );
         if (!isNationwide) {
-          const sido    = businessProfile.region_sido;     // 예: '경기도'
-          const sigungu = businessProfile.region_sigungu;  // 예: '수원시'
           const inRegion = regions.some(r =>
             (sido    && r.includes(sido))    ||
             (sigungu && r.includes(sigungu))
           );
           if (!inRegion) return false;
+        }
+      } else {
+        // target_regions 미입력: source가 다른 지역 클라이언트면 제외
+        const sourceRegion = LOCAL_SOURCES[p.source];
+        if (sourceRegion) {
+          const isMyRegion =
+            (sido    && sido.includes(sourceRegion)) ||
+            (sigungu && sigungu.includes(sourceRegion));
+          if (!isMyRegion) return false;
         }
       }
 
@@ -189,17 +203,39 @@ export default function ProgramsPage() {
   });
 
   // ── 정렬 ────────────────────────────────────────────────────────────────────
-  // 지역 우선순위: 2=내 지역 명시, 1=전국/미지정, 0=다른 지역
+  // source → 대표 시도명 (target_regions 미입력 시 fallback)
+  const SOURCE_REGION_MAP: Record<string, string> = {
+    seoul: '서울', gyeonggi: '경기', busan: '부산',
+    incheon: '인천', daegu: '대구', daejeon: '대전',
+    gwangju: '광주', ulsan: '울산',
+  };
+
+  // 지역 우선순위: 2=내 지역 명시/소스, 1=전국/미지정(전국소스), 0=다른 지역
   const getRegionPriority = (p: Program): number => {
     if (!businessProfile) return 1;
+    const sido    = businessProfile.region_sido;    // 예: '충청북도'
+    const sigungu = businessProfile.region_sigungu; // 예: '증평군'
     const regions = p.target_regions;
-    if (regions.length === 0) return 1; // 미지정 → 전국 수준
-    if (regions.some(r => r.includes('전국') || r.includes('전 지역') || r === '전체')) return 1;
-    if (regions.some(r =>
-      (businessProfile.region_sido    && r.includes(businessProfile.region_sido)) ||
-      (businessProfile.region_sigungu && r.includes(businessProfile.region_sigungu))
-    )) return 2; // 내 지역 명시 → 최우선
-    return 0; // 다른 지역 명시 → 후순위
+
+    if (regions.length > 0) {
+      if (regions.some(r => r.includes('전국') || r.includes('전 지역') || r === '전체')) return 1;
+      if (regions.some(r =>
+        (sido    && r.includes(sido))    ||
+        (sigungu && r.includes(sigungu))
+      )) return 2;
+      return 0;
+    }
+
+    // target_regions 미입력 → source로 지역 추론
+    const sourceRegion = SOURCE_REGION_MAP[p.source];
+    if (sourceRegion) {
+      // 지역 소스이고 내 지역이면 우선, 아니면 후순위
+      if ((sido && sido.includes(sourceRegion)) || (sigungu && sigungu.includes(sourceRegion))) return 2;
+      return 0;
+    }
+
+    // 전국 소스 (kstartup, gov24, bizinfo, datagokr) → 중간
+    return 1;
   };
 
   filteredPrograms = [...filteredPrograms].sort((a, b) => {
