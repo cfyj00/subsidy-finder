@@ -1,5 +1,21 @@
 import type { BusinessProfile, Program } from '@/types/database';
 
+// ── 지역명 별칭 (DB에 약칭/전체명 혼재 대응) ────────────────────────────────
+const SIDO_ALIASES: Record<string, string[]> = {
+  '서울특별시': ['서울'], '부산광역시': ['부산'], '대구광역시': ['대구'],
+  '인천광역시': ['인천'], '광주광역시': ['광주'], '대전광역시': ['대전'],
+  '울산광역시': ['울산'], '세종특별자치시': ['세종'],
+  '경기도': ['경기'], '강원특별자치도': ['강원', '강원도'],
+  '충청북도': ['충북'], '충청남도': ['충남'],
+  '전북특별자치도': ['전북', '전라북도'], '전라남도': ['전남'],
+  '경상북도': ['경북'], '경상남도': ['경남'],
+  '제주특별자치도': ['제주', '제주도'],
+};
+function sidoMatches(regionStr: string, sido: string): boolean {
+  if (regionStr.includes(sido) || sido.includes(regionStr)) return true;
+  return (SIDO_ALIASES[sido] ?? []).some(a => regionStr.includes(a) || a.includes(regionStr));
+}
+
 interface MatchResult {
   score: number;
   reasons: string[];
@@ -133,7 +149,7 @@ export function calculateMatch(profile: BusinessProfile, program: Program): Matc
     const sido     = profile.region_sido;      // 예: '충청북도'
     const sigungu  = profile.region_sigungu;   // 예: '증평군' (nullable)
 
-    if (regions.length === 0 || regions.some(r => r.includes('전국') || r === '전 지역')) {
+    if (regions.length === 0 || regions.some(r => r.includes('전국') || r.includes('전 지역') || r === '전체')) {
       // 전국 대상
       score += 20;
       reasons.push('전국 대상 사업');
@@ -144,22 +160,18 @@ export function calculateMatch(profile: BusinessProfile, program: Program): Matc
       reasons.push(`${sido} ${sigungu} 지역 대상`);
 
     } else if (regions.some(r => {
-      // 시도 단위 매칭 — 단, 다른 시군구가 명시된 경우는 제외
-      // 예: '충청북도' → 충북 사용자 20점
-      //     '충청북도 청주시' → 증평군 사용자는 점수 없음
-      if (!r.includes(sido)) return false;           // 다른 시도
-      // 시군구가 명시된 경우: '충청북도 청주시' → 내 시군구와 다르면 skip
-      if (sigungu && r !== sido && !r.includes(sigungu)) return false;
+      // 시도 단위 매칭 (약칭/전체명 모두 허용)
+      if (!sidoMatches(r, sido)) return false;
+      // 다른 시군구가 명시된 경우 제외: '충청북도 청주시' → 증평군 사용자 skip
+      if (sigungu && r.length > sido.length + 1 && !r.includes(sigungu)) return false;
       return true;
     })) {
       score += 20;
       reasons.push(`${sido} 지역 대상`);
 
-    } else if (sigungu && regions.some(r => r.includes(sido))) {
-      // 같은 시도지만 다른 시군구 대상 (예: 충북 청주시 사업 vs 증평군 사용자)
-      // → 5점 (완전 제외보다는 참고용으로 표시)
+    } else if (sigungu && regions.some(r => sidoMatches(r, sido))) {
+      // 같은 시도지만 다른 시군구
       score += 5;
-      // reasons에는 추가하지 않음 (mismatch로 표시)
       mismatches.push(`대상 지역: ${regions.join(', ')} (다른 시군구)`);
 
     } else {

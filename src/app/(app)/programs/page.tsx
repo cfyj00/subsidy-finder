@@ -22,6 +22,41 @@ import { ko } from 'date-fns/locale';
 import { matchesSearch } from '@/lib/search-keywords';
 import { stripHtml } from '@/lib/data/utils';
 
+// ── 지역명 정규화 ─────────────────────────────────────────────────────────────
+// 프로그램 DB에는 '충북', '경기' 등 약칭이 올 수 있고
+// 사용자 프로필에는 '충청북도', '경기도' 등 전체명이 저장됨 → 양방향 매핑
+const SIDO_ALIASES: Record<string, string[]> = {
+  '서울특별시':     ['서울'],
+  '부산광역시':     ['부산'],
+  '대구광역시':     ['대구'],
+  '인천광역시':     ['인천'],
+  '광주광역시':     ['광주'],
+  '대전광역시':     ['대전'],
+  '울산광역시':     ['울산'],
+  '세종특별자치시':  ['세종'],
+  '경기도':        ['경기'],
+  '강원특별자치도':  ['강원', '강원도'],
+  '충청북도':       ['충북'],
+  '충청남도':       ['충남'],
+  '전북특별자치도':  ['전북', '전라북도'],
+  '전라남도':       ['전남'],
+  '경상북도':       ['경북'],
+  '경상남도':       ['경남'],
+  '제주특별자치도':  ['제주', '제주도'],
+};
+// source → 소속 시도 full name (target_regions 미입력 시 fallback)
+const SOURCE_SIDO: Record<string, string> = {
+  seoul: '서울특별시', gyeonggi: '경기도', busan: '부산광역시',
+  incheon: '인천광역시', daegu: '대구광역시', daejeon: '대전광역시',
+  gwangju: '광주광역시', ulsan: '울산광역시',
+};
+/** 프로그램 지역 문자열 r 이 사용자의 sido(전체명)에 해당하는지 판단 */
+function sidoMatches(r: string, sido: string): boolean {
+  if (r.includes(sido) || sido.includes(r)) return true;
+  const aliases = SIDO_ALIASES[sido] ?? [];
+  return aliases.some(a => r.includes(a) || a.includes(r));
+}
+
 export default function ProgramsPage() {
   const router = useRouter();
   const { profile } = useProfile();
@@ -161,41 +196,30 @@ export default function ProgramsPage() {
 
     // 내사업검색: 마감 제외 + 내 지역 필터 + 매칭 점수 40점 이상
     if (filterMyBusiness && businessProfile) {
-      // 마감된 사업 제외 (open / upcoming / expected 만 표시)
       if (p.status === 'closed') return false;
 
-      // 지역 하드 필터: 전국 대상이거나 내 지역 포함한 사업만
+      // 지역 하드 필터: 전국이거나 내 지역 포함 사업만 표시
       const regions = p.target_regions;
       const sido    = businessProfile.region_sido;
       const sigungu = businessProfile.region_sigungu;
-      const LOCAL_SOURCES: Record<string, string> = {
-        seoul: '서울', gyeonggi: '경기', busan: '부산',
-        incheon: '인천', daegu: '대구', daejeon: '대전',
-        gwangju: '광주', ulsan: '울산',
-      };
+
       if (regions.length > 0) {
         const isNationwide = regions.some(r =>
           r.includes('전국') || r.includes('전 지역') || r === '전체'
         );
         if (!isNationwide) {
           const inRegion = regions.some(r =>
-            (sido    && r.includes(sido))    ||
+            (sido    && sidoMatches(r, sido))      ||
             (sigungu && r.includes(sigungu))
           );
           if (!inRegion) return false;
         }
       } else {
         // target_regions 미입력: source가 다른 지역 클라이언트면 제외
-        const sourceRegion = LOCAL_SOURCES[p.source];
-        if (sourceRegion) {
-          const isMyRegion =
-            (sido    && sido.includes(sourceRegion)) ||
-            (sigungu && sigungu.includes(sourceRegion));
-          if (!isMyRegion) return false;
-        }
+        const sourceSido = SOURCE_SIDO[p.source];
+        if (sourceSido && !sidoMatches(sourceSido, sido)) return false;
       }
 
-      // 매칭 점수 40점 이상만
       const score = getMatchScore(p.id) ?? 0;
       if (score < 40) return false;
     }
@@ -203,39 +227,28 @@ export default function ProgramsPage() {
   });
 
   // ── 정렬 ────────────────────────────────────────────────────────────────────
-  // source → 대표 시도명 (target_regions 미입력 시 fallback)
-  const SOURCE_REGION_MAP: Record<string, string> = {
-    seoul: '서울', gyeonggi: '경기', busan: '부산',
-    incheon: '인천', daegu: '대구', daejeon: '대전',
-    gwangju: '광주', ulsan: '울산',
-  };
-
   // 지역 우선순위: 2=내 지역 명시/소스, 1=전국/미지정(전국소스), 0=다른 지역
   const getRegionPriority = (p: Program): number => {
     if (!businessProfile) return 1;
-    const sido    = businessProfile.region_sido;    // 예: '충청북도'
-    const sigungu = businessProfile.region_sigungu; // 예: '증평군'
+    const sido    = businessProfile.region_sido;
+    const sigungu = businessProfile.region_sigungu;
     const regions = p.target_regions;
 
     if (regions.length > 0) {
       if (regions.some(r => r.includes('전국') || r.includes('전 지역') || r === '전체')) return 1;
       if (regions.some(r =>
-        (sido    && r.includes(sido))    ||
+        (sido    && sidoMatches(r, sido))   ||
         (sigungu && r.includes(sigungu))
       )) return 2;
       return 0;
     }
 
     // target_regions 미입력 → source로 지역 추론
-    const sourceRegion = SOURCE_REGION_MAP[p.source];
-    if (sourceRegion) {
-      // 지역 소스이고 내 지역이면 우선, 아니면 후순위
-      if ((sido && sido.includes(sourceRegion)) || (sigungu && sigungu.includes(sourceRegion))) return 2;
-      return 0;
+    const sourceSido = SOURCE_SIDO[p.source];
+    if (sourceSido) {
+      return sidoMatches(sourceSido, sido) ? 2 : 0;
     }
-
-    // 전국 소스 (kstartup, gov24, bizinfo, datagokr) → 중간
-    return 1;
+    return 1; // 전국 소스
   };
 
   filteredPrograms = [...filteredPrograms].sort((a, b) => {
