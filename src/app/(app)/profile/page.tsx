@@ -76,6 +76,21 @@ function MultiSelect({ options, selected, onChange }: {
   );
 }
 
+// ── 기타 인증 저장/파싱 헬퍼 ──────────────────────────────────────────────────
+const CERT_TAG = '__OTHER_CERTS__:';
+function extractOtherCerts(notes: string): string {
+  const line = notes.split('\n').find(l => l.startsWith(CERT_TAG));
+  return line ? line.slice(CERT_TAG.length).trim() : '';
+}
+function stripCertsFromNotes(notes: string): string {
+  return notes.split('\n').filter(l => !l.startsWith(CERT_TAG)).join('\n').trim();
+}
+function mergeNotesWithCerts(notes: string, certs: string): string {
+  const base = stripCertsFromNotes(notes);
+  if (!certs.trim()) return base || '';
+  return `${CERT_TAG}${certs.trim()}${base ? '\n' + base : ''}`;
+}
+
 // ── 빈 폼 상태 ───────────────────────────────────────────────────────────────
 const emptyForm = () => ({
   profileName: '',
@@ -98,6 +113,7 @@ const emptyForm = () => ({
   isMainbiz: false,
   hasSmartFactory: false,
   smartFactoryLevel: '',
+  otherCertifications: '',
   challenges: [] as string[],
   goals: [] as string[],
   notes: '',
@@ -128,9 +144,10 @@ function profileToForm(p: BusinessProfile): FormState {
     isMainbiz: p.is_mainbiz ?? false,
     hasSmartFactory: p.has_smart_factory ?? false,
     smartFactoryLevel: p.smart_factory_level ?? '',
+    otherCertifications: extractOtherCerts(p.notes ?? ''),
     challenges: p.current_challenges ?? [],
     goals: p.goals ?? [],
-    notes: p.notes ?? '',
+    notes: stripCertsFromNotes(p.notes ?? ''),
   };
 }
 
@@ -229,7 +246,7 @@ export default function ProfilePage() {
       main_products: form.mainProducts || null,
       current_challenges: form.challenges,
       goals: form.goals,
-      notes: form.notes || null,
+      notes: mergeNotesWithCerts(form.notes, form.otherCertifications) || null,
     };
 
     let newId: string | null = null;
@@ -623,6 +640,16 @@ export default function ProfilePage() {
                     className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
                   <span className="text-sm text-gray-700 dark:text-gray-300">스마트공장 구축 완료</span>
                 </label>
+              </div>
+              {/* 기타 인증 직접 입력 */}
+              <div className="mt-2">
+                <input
+                  type="text"
+                  className={inputCls}
+                  value={form.otherCertifications}
+                  onChange={e => setForm(f => ({ ...f, otherCertifications: e.target.value }))}
+                  placeholder="기타 인증 직접 입력 (예: ISO 9001, 장애인표준사업장, GMP 등)"
+                />
               </div>
             </div>
             {form.hasSmartFactory && (
