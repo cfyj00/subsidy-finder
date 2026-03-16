@@ -61,7 +61,7 @@ export default function BriefingPage() {
 
     const [{ data: apps }, { data: progs }, { data: matchData }, { data: expectedProgs }] = await Promise.all([
       supabase.from('user_applications').select('id, user_id, program_id, status, notes, created_at, updated_at').eq('user_id', user.id).order('created_at', { ascending: false }),
-      supabase.from('programs').select('id, title, managing_org, category, support_type, target_regions, funding_amount_min, funding_amount_max, application_end, status, is_featured, description').eq('status', 'open').order('is_featured', { ascending: false }).limit(20),
+      supabase.from('programs').select('id, external_id, source, title, managing_org, category, subcategory, support_type, target_regions, target_industries, target_company_size, min_employee_count, max_employee_count, min_company_age, max_company_age, min_revenue, max_revenue, funding_amount_min, funding_amount_max, self_funding_ratio, application_start, application_end, status, description, eligibility_summary, detail_url, is_featured, is_recurring, typical_open_month, created_at').eq('status', 'open').order('is_featured', { ascending: false }).limit(20),
       supabase.from('user_program_matches').select('id, program_id, user_id, match_score, match_reasons, mismatch_reasons, is_bookmarked, is_dismissed, calculated_at, applied_at, notes').eq('user_id', user.id),
       supabase.from('programs').select('id, title, managing_org, category, support_type, target_regions, funding_amount_min, funding_amount_max, typical_open_month, status').eq('status', 'expected').order('typical_open_month', { ascending: true }).limit(10),
     ]);

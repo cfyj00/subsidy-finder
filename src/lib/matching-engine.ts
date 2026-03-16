@@ -130,7 +130,7 @@ export function calculateMatch(profile: BusinessProfile, program: Program): Matc
 
   // 1. 지역 (20점) — 계층형 매칭: 시군구 > 시도 > 전국
   {
-    const regions  = program.target_regions;
+    const regions  = program.target_regions ?? [];   // DB null 방어
     const sido     = profile.region_sido;      // 예: '충청북도'
     const sigungu  = profile.region_sigungu;   // 예: '증평군' (nullable)
 
@@ -165,7 +165,7 @@ export function calculateMatch(profile: BusinessProfile, program: Program): Matc
   }
 
   // 2. 업종 (20점) — 3단계: 완전매칭 20 / 부분매칭 12 / 불일치 0
-  if (program.target_industries.length === 0) {
+  if (!program.target_industries || program.target_industries.length === 0) {
     score += 20;
     reasons.push('업종 제한 없음');
   } else {

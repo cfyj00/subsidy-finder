@@ -15,14 +15,15 @@ import {
   ExternalLink, ChevronRight, Filter, X, Loader2, Newspaper, Sparkles, MapPin,
   ArrowUpDown, DollarSign, Clock,
 } from 'lucide-react';
-
-type SortBy = 'score' | 'amount' | 'deadline';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { matchesSearch } from '@/lib/search-keywords';
 import { stripHtml } from '@/lib/data/utils';
 import { isPersonName } from '@/lib/utils';
 import { sidoMatches, SOURCE_SIDO, TITLE_REGION_MAP } from '@/lib/region-utils';
+
+type SortBy = 'score' | 'amount' | 'deadline';
+
 function getEffectiveRegions(p: Program): string[] {
   if (p.target_regions.length > 0) return p.target_regions;
   // target_regions 없으면 제목 [지역] 태그 파싱
