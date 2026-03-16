@@ -404,12 +404,13 @@ function ConsultantContent() {
   });
 
   const loadData = useCallback(async () => {
+    try {
     const supabase = getSupabaseBrowser();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setLoading(false); return; }
 
     if (programId) {
-      const { data: prog } = await supabase.from('programs').select('id, title, managing_org, category, support_type, target_regions, funding_amount_min, funding_amount_max, application_end, status, description, eligibility_summary, detail_url').eq('id', programId).single();
+      const { data: prog } = await supabase.from('programs').select('id, external_id, source, title, managing_org, category, subcategory, support_type, target_regions, target_industries, target_company_size, min_employee_count, max_employee_count, min_company_age, max_company_age, min_revenue, max_revenue, funding_amount_min, funding_amount_max, self_funding_ratio, application_start, application_end, status, description, eligibility_summary, detail_url, is_featured, is_recurring, typical_open_month, created_at').eq('id', programId).single();
       const program = prog as Program | null;
       setSingleProgram(program);
 
@@ -449,7 +450,7 @@ function ConsultantContent() {
       } else {
         // 저장된 점수가 없으면 최신 공모 100건만 가져와 계산
         const { data: progs } = await supabase
-          .from('programs').select('id, title, managing_org, category, support_type, target_regions, funding_amount_min, funding_amount_max, application_end, status, description, eligibility_summary, detail_url')
+          .from('programs').select('id, external_id, source, title, managing_org, category, subcategory, support_type, target_regions, target_industries, target_company_size, min_employee_count, max_employee_count, min_company_age, max_company_age, min_revenue, max_revenue, funding_amount_min, funding_amount_max, self_funding_ratio, application_start, application_end, status, description, eligibility_summary, detail_url, is_featured, is_recurring, typical_open_month, created_at')
           .in('status', ['open', 'always'])
           .order('is_featured', { ascending: false })
           .limit(100);
@@ -467,7 +468,11 @@ function ConsultantContent() {
         setConsultingPrompt(generateConsultingPrompt(businessProfile, scored));
       }
     }
-    setLoading(false);
+    } catch (err) {
+      console.error('[ConsultantPage] loadData error:', err);
+    } finally {
+      setLoading(false);
+    }
   }, [programId, businessProfile]);
 
   useEffect(() => {
