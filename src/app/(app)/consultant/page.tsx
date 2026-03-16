@@ -409,7 +409,7 @@ function ConsultantContent() {
     if (!user) { setLoading(false); return; }
 
     if (programId) {
-      const { data: prog } = await supabase.from('programs').select('*').eq('id', programId).single();
+      const { data: prog } = await supabase.from('programs').select('id, title, managing_org, category, support_type, target_regions, funding_amount_min, funding_amount_max, application_end, status, description, eligibility_summary, detail_url').eq('id', programId).single();
       const program = prog as Program | null;
       setSingleProgram(program);
 
@@ -449,7 +449,7 @@ function ConsultantContent() {
       } else {
         // 저장된 점수가 없으면 최신 공모 100건만 가져와 계산
         const { data: progs } = await supabase
-          .from('programs').select('*')
+          .from('programs').select('id, title, managing_org, category, support_type, target_regions, funding_amount_min, funding_amount_max, application_end, status, description, eligibility_summary, detail_url')
           .in('status', ['open', 'always'])
           .order('is_featured', { ascending: false })
           .limit(100);

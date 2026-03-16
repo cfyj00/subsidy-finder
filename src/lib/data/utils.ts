@@ -125,6 +125,22 @@ export function extractProgramDetails(text: string | null | undefined): Extracte
   };
 }
 
+/** 공통 카테고리 추론 — 키워드 기반 */
+export function guessCategoryFromText(text: string): string {
+  const t = text.toLowerCase();
+  if (/수출|해외|글로벌|fta|oem|바이어/.test(t))                    return '수출/해외진출';
+  if (/창업|스타트업|초기기업|예비창업/.test(t))                     return '창업/초기기업';
+  if (/r&d|연구개발|기술개발|특허|혁신/.test(t))                     return '기술/R&D';
+  if (/스마트공장|디지털전환|ict|ai|자동화/.test(t))                  return '스마트/디지털';
+  if (/인력|채용|고용|일자리|직원/.test(t))                          return '인력/고용';
+  if (/환경|탄소|에너지|녹색|친환경/.test(t))                        return '환경/에너지';
+  if (/마케팅|브랜드|홍보|판로|온라인/.test(t))                      return '마케팅/판로';
+  if (/융자|대출|자금|금융|보증/.test(t))                            return '금융/자금';
+  if (/보조금|지원금/.test(t))                                       return '보조금';
+  if (/컨설팅|멘토링|교육|훈련/.test(t))                            return '컨설팅/교육';
+  return '기타 지원';
+}
+
 /** HTML 태그 및 엔티티 제거 */
 export function stripHtml(html: string | null | undefined): string | null {
   if (!html) return null;

@@ -1,20 +1,5 @@
 import type { BusinessProfile, Program } from '@/types/database';
-
-// ── 지역명 별칭 (DB에 약칭/전체명 혼재 대응) ────────────────────────────────
-const SIDO_ALIASES: Record<string, string[]> = {
-  '서울특별시': ['서울'], '부산광역시': ['부산'], '대구광역시': ['대구'],
-  '인천광역시': ['인천'], '광주광역시': ['광주'], '대전광역시': ['대전'],
-  '울산광역시': ['울산'], '세종특별자치시': ['세종'],
-  '경기도': ['경기'], '강원특별자치도': ['강원', '강원도'],
-  '충청북도': ['충북'], '충청남도': ['충남'],
-  '전북특별자치도': ['전북', '전라북도'], '전라남도': ['전남'],
-  '경상북도': ['경북'], '경상남도': ['경남'],
-  '제주특별자치도': ['제주', '제주도'],
-};
-function sidoMatches(regionStr: string, sido: string): boolean {
-  if (regionStr.includes(sido) || sido.includes(regionStr)) return true;
-  return (SIDO_ALIASES[sido] ?? []).some(a => regionStr.includes(a) || a.includes(regionStr));
-}
+import { SIDO_ALIASES, sidoMatches } from '@/lib/region-utils';
 
 interface MatchResult {
   score: number;
@@ -26,7 +11,7 @@ interface MatchResult {
 function classifyCompanySize(profile: BusinessProfile): string[] {
   const sizes: string[] = [];
   const emp = profile.employee_count ?? 0;
-  const rev = (profile.annual_revenue ?? 0) * 10_000; // 백만원→원 단위 아님, 백만원 그대로
+  const rev = profile.annual_revenue ?? 0; // 백만원 단위 그대로 사용
 
   // 소상공인: 직원 5명 미만(제조업 10명) or 연매출 3억 미만 — 간략 기준
   if (emp < 10 || rev < 300) sizes.push('소상공인');

@@ -15,7 +15,7 @@ function stripHtml(str: string): string {
     .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
-    .replace(/&#\d+;/g, '')
+    .replace(/&#(?:\d+|x[0-9a-fA-F]+);/g, '')
     .trim();
 }
 
@@ -27,6 +27,14 @@ export interface NaverNewsItem {
 }
 
 export async function GET(req: Request) {
+  // ── 인증 확인 (로그인 사용자만 허용) ─────────────────────────────────────
+  const { createSupabaseServer } = await import('@/lib/supabase-server');
+  const supabase = await createSupabaseServer();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized', items: [] }, { status: 401 });
+  }
+
   const { searchParams } = new URL(req.url);
   const query   = searchParams.get('q')?.trim();
   const display = Math.min(Number(searchParams.get('display') ?? '5'), 10);

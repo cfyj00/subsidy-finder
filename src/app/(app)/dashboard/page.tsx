@@ -15,18 +15,11 @@ import {
 } from 'lucide-react';
 import { format, differenceInDays } from 'date-fns';
 import { ko } from 'date-fns/locale';
+import { isPersonName } from '@/lib/utils';
 
 interface TopMatch {
   program: Program;
   match: { score: number; label: string; color: string; reasons: string[] };
-}
-
-// 개인명 감지 (managing_org 표시용)
-const KOREAN_SURNAMES = '김이박최정강조윤장임한오서신권황안송유홍전고문양손배백노하허심도우남엄채원천방공현함변염석선설마길진봉온형민계';
-function isPersonName(name: string | null | undefined): boolean {
-  if (!name) return false;
-  const t = name.trim();
-  return /^[가-힣]{2,4}$/.test(t) && KOREAN_SURNAMES.includes(t[0]);
 }
 
 export default function DashboardPage() {
@@ -44,7 +37,7 @@ export default function DashboardPage() {
     const supabase = getSupabaseBrowser();
     const { data: progs } = await supabase
       .from('programs')
-      .select('*')
+      .select('id, title, managing_org, category, support_type, target_regions, funding_amount_min, funding_amount_max, application_end, status, is_featured, description, target_industries, target_company_size')
       .in('status', ['open', 'upcoming'])
       .order('is_featured', { ascending: false });
 

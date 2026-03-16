@@ -30,7 +30,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
     }
     const { data } = await supabase
       .from('profiles')
-      .select('*')
+      .select('id, user_id, email, full_name, avatar_url, plan, stripe_customer_id, created_at, updated_at')
       .eq('id', user.id)
       .single();
     setProfile(data as Profile | null);

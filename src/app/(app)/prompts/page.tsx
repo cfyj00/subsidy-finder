@@ -110,7 +110,7 @@ export default function PromptsPage() {
     async function load() {
       const supabase = getSupabaseBrowser();
       const { data: progs } = await supabase
-        .from('programs').select('*').in('status', ['open', 'upcoming']).limit(50);
+        .from('programs').select('id, title, managing_org, category, support_type, target_regions, funding_amount_min, funding_amount_max, application_end, status, description, eligibility_summary, detail_url').in('status', ['open', 'upcoming']).limit(50);
 
       if (progs) {
         // 매칭 점수 순으로 정렬

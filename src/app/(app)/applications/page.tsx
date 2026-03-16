@@ -899,7 +899,7 @@ export default function ApplicationsPage() {
     if (!user) { setLoading(false); return; }
     const { data } = await supabase
       .from('user_applications')
-      .select('*')
+      .select('id, user_id, program_id, program_title, managing_org, application_deadline, applied_amount, status, notes, created_at, updated_at')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false });
     setApps((data as UserApplication[]) ?? []);

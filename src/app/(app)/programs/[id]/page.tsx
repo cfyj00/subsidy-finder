@@ -23,6 +23,7 @@ import {
 } from '@/lib/ai/prompt-generator';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
+import { isPersonName } from '@/lib/utils';
 
 // ── AddApplication Modal ──────────────────────────────────────────────────────
 interface AddAppModalProps {
@@ -131,8 +132,8 @@ export default function ProgramDetailPage() {
     if (!user) return;
 
     const [{ data: prog }, { data: matchData }, { data: appData }] = await Promise.all([
-      supabase.from('programs').select('*').eq('id', id).single(),
-      supabase.from('user_program_matches').select('*').eq('user_id', user.id).eq('program_id', id).maybeSingle(),
+      supabase.from('programs').select('id, external_id, source, title, managing_org, category, subcategory, support_type, target_regions, target_industries, target_company_size, min_employee_count, max_employee_count, min_company_age, max_company_age, min_revenue, max_revenue, funding_amount_min, funding_amount_max, self_funding_ratio, application_start, application_end, status, description, eligibility_summary, detail_url, is_featured, is_recurring, typical_open_month, created_at').eq('id', id).single(),
+      supabase.from('user_program_matches').select('id, program_id, user_id, is_bookmarked, applied_at, notes').eq('user_id', user.id).eq('program_id', id).maybeSingle(),
       supabase.from('user_applications').select('id').eq('user_id', user.id).eq('program_id', id).maybeSingle(),
     ]);
 
@@ -184,13 +185,6 @@ export default function ProgramDetailPage() {
       setMatch(newMatch as UserProgramMatch | null);
     }
     setBookmarkLoading(false);
-  };
-
-  const KOREAN_SURNAMES = '김이박최정강조윤장임한오서신권황안송유홍전고문양손배백노하허심도우남엄채원천방공현함변염석선설마길진봉온형민계';
-  const isPersonName = (name: string | null | undefined): boolean => {
-    if (!name) return false;
-    const t = name.trim();
-    return /^[가-힣]{2,4}$/.test(t) && KOREAN_SURNAMES.includes(t[0]);
   };
 
   const statusBadge = (s: string) => {

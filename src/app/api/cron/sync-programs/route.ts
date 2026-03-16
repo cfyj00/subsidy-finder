@@ -15,6 +15,7 @@
  */
 
 import { NextResponse } from 'next/server';
+import { timingSafeEqual } from 'crypto';
 import { createSupabaseAdmin } from '@/lib/supabase-admin';
 import {
   fetchAllOpenPrograms,
@@ -37,10 +38,23 @@ import type { ParsedProgram } from '@/lib/data/bizinfo-client';
 
 export async function POST(req: Request) {
   // ── 1. 크론 시크릿 검증 ────────────────────────────────────────────────
-  const secret   = req.headers.get('x-cron-secret') ?? req.headers.get('authorization');
-  const expected = process.env.CRON_SECRET;
+  const secret   = req.headers.get('x-cron-secret') ?? req.headers.get('authorization') ?? '';
+  const expected = process.env.CRON_SECRET ?? '';
 
-  if (!expected || secret !== expected) {
+  if (!expected) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  let authorized = false;
+  try {
+    const a = Buffer.from(secret);
+    const b = Buffer.from(expected);
+    authorized = a.length === b.length && timingSafeEqual(a, b);
+  } catch {
+    authorized = false;
+  }
+
+  if (!authorized) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
@@ -200,7 +214,7 @@ export async function POST(req: Request) {
       .select('id')
       .eq('source', source)
       .in('status', ['open', 'upcoming'])
-      .not('external_id', 'in', `(${ids.map(id => `'${id}'`).join(',')})`);
+      .not('external_id', 'in', `(${ids.map(id => `'${id.replace(/'/g, '')}'`).join(',')})`);
 
     if (toClose && toClose.length > 0) {
       await admin

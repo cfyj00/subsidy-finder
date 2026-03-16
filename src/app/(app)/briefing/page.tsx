@@ -14,14 +14,7 @@ import {
 import { DAILY_TIPS } from '@/lib/constants';
 import { format, isToday, isTomorrow } from 'date-fns';
 import { ko } from 'date-fns/locale';
-
-// 개인명 감지
-const KOREAN_SURNAMES = '김이박최정강조윤장임한오서신권황안송유홍전고문양손배백노하허심도우남엄채원천방공현함변염석선설마길진봉온형민계';
-function isPersonName(name: string | null | undefined): boolean {
-  if (!name) return false;
-  const t = name.trim();
-  return /^[가-힣]{2,4}$/.test(t) && KOREAN_SURNAMES.includes(t[0]);
-}
+import { isPersonName } from '@/lib/utils';
 
 // 마감 D-day 포맷
 function dday(deadline: string | null): { label: string; urgent: boolean } | null {
@@ -67,10 +60,10 @@ export default function BriefingPage() {
     if (!user) { setLoading(false); return; }
 
     const [{ data: apps }, { data: progs }, { data: matchData }, { data: expectedProgs }] = await Promise.all([
-      supabase.from('user_applications').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
-      supabase.from('programs').select('*').eq('status', 'open').order('is_featured', { ascending: false }).limit(20),
-      supabase.from('user_program_matches').select('*').eq('user_id', user.id),
-      supabase.from('programs').select('*').eq('status', 'expected').order('typical_open_month', { ascending: true }).limit(10),
+      supabase.from('user_applications').select('id, user_id, program_id, status, notes, created_at, updated_at').eq('user_id', user.id).order('created_at', { ascending: false }),
+      supabase.from('programs').select('id, title, managing_org, category, support_type, target_regions, funding_amount_min, funding_amount_max, application_end, status, is_featured, description').eq('status', 'open').order('is_featured', { ascending: false }).limit(20),
+      supabase.from('user_program_matches').select('id, program_id, user_id, match_score, match_reasons, mismatch_reasons, is_bookmarked, is_dismissed, calculated_at, applied_at, notes').eq('user_id', user.id),
+      supabase.from('programs').select('id, title, managing_org, category, support_type, target_regions, funding_amount_min, funding_amount_max, typical_open_month, status').eq('status', 'expected').order('typical_open_month', { ascending: true }).limit(10),
     ]);
 
     setApplications((apps ?? []) as UserApplication[]);

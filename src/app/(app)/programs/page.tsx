@@ -21,51 +21,8 @@ import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { matchesSearch } from '@/lib/search-keywords';
 import { stripHtml } from '@/lib/data/utils';
-
-// ── 지역명 정규화 ─────────────────────────────────────────────────────────────
-// 프로그램 DB에는 '충북', '경기' 등 약칭이 올 수 있고
-// 사용자 프로필에는 '충청북도', '경기도' 등 전체명이 저장됨 → 양방향 매핑
-const SIDO_ALIASES: Record<string, string[]> = {
-  '서울특별시':     ['서울'],
-  '부산광역시':     ['부산'],
-  '대구광역시':     ['대구'],
-  '인천광역시':     ['인천'],
-  '광주광역시':     ['광주'],
-  '대전광역시':     ['대전'],
-  '울산광역시':     ['울산'],
-  '세종특별자치시':  ['세종'],
-  '경기도':        ['경기'],
-  '강원특별자치도':  ['강원', '강원도'],
-  '충청북도':       ['충북'],
-  '충청남도':       ['충남'],
-  '전북특별자치도':  ['전북', '전라북도'],
-  '전라남도':       ['전남'],
-  '경상북도':       ['경북'],
-  '경상남도':       ['경남'],
-  '제주특별자치도':  ['제주', '제주도'],
-};
-// source → 소속 시도 full name (target_regions 미입력 시 fallback)
-const SOURCE_SIDO: Record<string, string> = {
-  seoul: '서울특별시', gyeonggi: '경기도', busan: '부산광역시',
-  incheon: '인천광역시', daegu: '대구광역시', daejeon: '대전광역시',
-  gwangju: '광주광역시', ulsan: '울산광역시',
-};
-/** 프로그램 지역 문자열 r 이 사용자의 sido(전체명)에 해당하는지 판단 */
-function sidoMatches(r: string, sido: string): boolean {
-  if (r.includes(sido) || sido.includes(r)) return true;
-  const aliases = SIDO_ALIASES[sido] ?? [];
-  return aliases.some(a => r.includes(a) || a.includes(r));
-}
-
-// 제목 "[경남]", "[대구ㆍ경북]" 패턴에서 지역 목록 추출 (bizinfo DB 기존 데이터 대응)
-const TITLE_REGION_MAP: Record<string, string> = {
-  '서울': '서울특별시', '부산': '부산광역시', '대구': '대구광역시',
-  '인천': '인천광역시', '광주': '광주광역시', '대전': '대전광역시',
-  '울산': '울산광역시', '세종': '세종특별자치시', '경기': '경기도',
-  '강원': '강원특별자치도', '충북': '충청북도', '충남': '충청남도',
-  '전북': '전북특별자치도', '전남': '전라남도',
-  '경북': '경상북도', '경남': '경상남도', '제주': '제주특별자치도',
-};
+import { isPersonName } from '@/lib/utils';
+import { sidoMatches, SOURCE_SIDO, TITLE_REGION_MAP } from '@/lib/region-utils';
 function getEffectiveRegions(p: Program): string[] {
   if (p.target_regions.length > 0) return p.target_regions;
   // target_regions 없으면 제목 [지역] 태그 파싱
@@ -110,13 +67,13 @@ export default function ProgramsPage() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    let query = supabase.from('programs').select('*').order('is_featured', { ascending: false }).order('created_at', { ascending: false });
+    let query = supabase.from('programs').select('id, external_id, source, title, managing_org, category, subcategory, support_type, target_regions, target_industries, target_company_size, min_employee_count, max_employee_count, min_company_age, max_company_age, min_revenue, max_revenue, funding_amount_min, funding_amount_max, application_start, application_end, status, description, eligibility_summary, detail_url, is_featured, is_recurring, typical_open_month, created_at').order('is_featured', { ascending: false }).order('created_at', { ascending: false });
     if (filterCategory) query = query.eq('category', filterCategory);
     if (filterStatus)   query = query.eq('status', filterStatus);
     const { data: progs } = await query;
     setPrograms((progs || []) as Program[]);
 
-    const { data: matchData } = await supabase.from('user_program_matches').select('*').eq('user_id', user.id);
+    const { data: matchData } = await supabase.from('user_program_matches').select('id, program_id, user_id, match_score, match_reasons, mismatch_reasons, is_bookmarked, is_dismissed, calculated_at, applied_at, notes').eq('user_id', user.id);
     const matchMap: Record<string, UserProgramMatch> = {};
     (matchData || []).forEach((m: UserProgramMatch) => { matchMap[m.program_id] = m; });
     setMatches(matchMap);
@@ -304,13 +261,6 @@ export default function ProgramsPage() {
     return (getMatchScore(b.id) ?? 0) - (getMatchScore(a.id) ?? 0);
   });
 
-  const KOREAN_SURNAMES = '김이박최정강조윤장임한오서신권황안송유홍전고문양손배백노하허심도우남엄채원천방공현함변염석선설마길진봉온형민계';
-  const isPersonName = (name: string | null | undefined): boolean => {
-    if (!name) return false;
-    const t = name.trim();
-    return /^[가-힣]{2,4}$/.test(t) && KOREAN_SURNAMES.includes(t[0]);
-  };
-
   const statusLabel = (s: string) => {
     switch (s) {
       case 'open':     return <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">모집중</span>;
@@ -360,7 +310,7 @@ export default function ProgramsPage() {
           <p className="text-sm text-emerald-700 dark:text-emerald-300 flex-1">
             <span className="font-semibold">{businessProfile.business_name}</span> 에 맞는 사업만 표시 중 · 매칭 점수 높은 순
           </p>
-          <button onClick={() => setFilterMyBusiness(false)} className="text-emerald-500 hover:text-emerald-700">
+          <button onClick={() => setFilterMyBusiness(false)} aria-label="내사업검색 닫기" className="text-emerald-500 hover:text-emerald-700">
             <X size={14} />
           </button>
         </div>
@@ -381,7 +331,7 @@ export default function ProgramsPage() {
             className="w-full pl-9 pr-8 py-2.5 border border-gray-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
           {searchQuery && (
-            <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+            <button onClick={() => setSearchQuery('')} aria-label="검색어 지우기" className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
               <X size={14} />
             </button>
           )}
@@ -714,6 +664,7 @@ export default function ProgramsPage() {
                     )}
                     <button
                       onClick={(e) => { e.stopPropagation(); toggleBookmark(program.id); }}
+                      aria-label={bookmarked ? '북마크 해제' : '북마크 추가'}
                       className={`p-1.5 rounded-lg transition-colors ${bookmarked ? 'text-amber-500 hover:text-amber-600' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'}`}>
                       {bookmarked ? <BookmarkCheck size={18} /> : <Bookmark size={18} />}
                     </button>

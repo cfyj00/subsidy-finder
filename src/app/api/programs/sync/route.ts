@@ -38,6 +38,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  // ── 관리자 권한 확인 ───────────────────────────────────────────────────────
+  const adminEmail = process.env.ADMIN_EMAIL;
+  if (adminEmail && user.email !== adminEmail) {
+    return NextResponse.json({ error: 'Forbidden: 관리자만 실행 가능합니다' }, { status: 403 });
+  }
+
   // ── 2. API 키 확인 ──────────────────────────────────────────────────────
   const apiKey = process.env.BIZINFO_API_KEY ?? process.env.DATA_GO_KR_API_KEY;
   if (!apiKey) {
@@ -166,7 +172,7 @@ export async function POST(req: Request) {
       .select('id')
       .eq('source', source)
       .in('status', ['open', 'upcoming'])
-      .not('external_id', 'in', `(${ids.map(id => `'${id}'`).join(',')})`);
+      .not('external_id', 'in', `(${ids.map(id => `'${id.replace(/'/g, '')}'`).join(',')})`);
 
     if (toClose && toClose.length > 0) {
       await admin

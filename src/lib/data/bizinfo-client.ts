@@ -12,6 +12,7 @@
  */
 
 import { stripHtml, extractProgramDetails } from './utils';
+import { isPersonName } from '@/lib/utils';
 
 // ─── 응답 타입 ──────────────────────────────────────────────────────────────
 
@@ -52,15 +53,6 @@ const PAGE_SIZE = 100;
 function getApiKey(): string {
   // BIZINFO_API_KEY 가 정식 명칭 (crtfcKey 파라미터로 전달)
   return process.env.BIZINFO_API_KEY ?? '';
-}
-
-// ─── 개인 이름 감지 (jrsdInsttNm에 기관명 대신 개인명이 들어오는 경우) ──────
-
-const KOREAN_SURNAMES = '김이박최정강조윤장임한오서신권황안송유홍전고문양손배백노하허심도우남엄채원천방공현함변염석선설마길진봉온형민계';
-function isPersonName(name: string | undefined | null): boolean {
-  if (!name) return false;
-  const t = name.trim();
-  return /^[가-힣]{2,4}$/.test(t) && KOREAN_SURNAMES.includes(t[0]);
 }
 
 // ─── 날짜 파싱 (YYYYMMDD → ISO) ────────────────────────────────────────────

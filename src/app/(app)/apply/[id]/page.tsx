@@ -15,14 +15,7 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
-
-// 개인명 감지
-const KOREAN_SURNAMES = '김이박최정강조윤장임한오서신권황안송유홍전고문양손배백노하허심도우남엄채원천방공현함변염석선설마길진봉온형민계';
-function isPersonName(name: string | null | undefined): boolean {
-  if (!name) return false;
-  const t = name.trim();
-  return /^[가-힣]{2,4}$/.test(t) && KOREAN_SURNAMES.includes(t[0]);
-}
+import { isPersonName } from '@/lib/utils';
 
 // ── 지원 단계 정의 ────────────────────────────────────────────────────────────
 interface Step {
@@ -126,8 +119,8 @@ export default function ApplyPage() {
     if (!user) { setLoading(false); return; }
 
     const [{ data: prog }, { data: app }] = await Promise.all([
-      supabase.from('programs').select('*').eq('id', id).single(),
-      supabase.from('user_applications').select('*').eq('user_id', user.id).eq('program_id', id).maybeSingle(),
+      supabase.from('programs').select('id, external_id, source, title, managing_org, category, subcategory, support_type, target_regions, target_industries, target_company_size, min_employee_count, max_employee_count, min_company_age, max_company_age, min_revenue, max_revenue, funding_amount_min, funding_amount_max, self_funding_ratio, application_start, application_end, status, description, eligibility_summary, detail_url, is_featured, is_recurring, typical_open_month, created_at').eq('id', id).single(),
+      supabase.from('user_applications').select('id, user_id, program_id, program_title, managing_org, application_deadline, applied_amount, status, notes, created_at, updated_at').eq('user_id', user.id).eq('program_id', id).maybeSingle(),
     ]);
 
     setProgram(prog as Program | null);
