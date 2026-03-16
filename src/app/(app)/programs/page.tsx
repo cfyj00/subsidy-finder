@@ -189,23 +189,25 @@ export default function ProgramsPage() {
   });
 
   // ── 정렬 ────────────────────────────────────────────────────────────────────
-  const isInMyRegion = (p: Program): boolean => {
-    if (!businessProfile) return false;
-    if (p.target_regions.length === 0) return true;
-    if (p.target_regions.some(r => r.includes('전국') || r === '전 지역' || r === '전체')) return true;
-    return p.target_regions.some(r =>
+  // 지역 우선순위: 2=내 지역 명시, 1=전국/미지정, 0=다른 지역
+  const getRegionPriority = (p: Program): number => {
+    if (!businessProfile) return 1;
+    const regions = p.target_regions;
+    if (regions.length === 0) return 1; // 미지정 → 전국 수준
+    if (regions.some(r => r.includes('전국') || r.includes('전 지역') || r === '전체')) return 1;
+    if (regions.some(r =>
       (businessProfile.region_sido    && r.includes(businessProfile.region_sido)) ||
       (businessProfile.region_sigungu && r.includes(businessProfile.region_sigungu))
-    );
+    )) return 2; // 내 지역 명시 → 최우선
+    return 0; // 다른 지역 명시 → 후순위
   };
 
   filteredPrograms = [...filteredPrograms].sort((a, b) => {
-    // 내 지역 우선 (모든 정렬 기준의 1순위)
+    // 내 지역 우선 (3단계: 내지역 > 전국/미지정 > 다른지역)
     if (localFirst && businessProfile) {
-      const aLocal = isInMyRegion(a);
-      const bLocal = isInMyRegion(b);
-      if (aLocal && !bLocal) return -1;
-      if (!aLocal && bLocal) return 1;
+      const aPri = getRegionPriority(a);
+      const bPri = getRegionPriority(b);
+      if (bPri !== aPri) return bPri - aPri;
     }
     // 정렬 기준
     if (sortBy === 'amount') {
