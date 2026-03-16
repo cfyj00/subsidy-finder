@@ -519,7 +519,14 @@ function AppCard({ app, onMoveBack, onMoveForward, onEdit, onDelete, onResult }:
   return (
     <div className={`rounded-xl border border-gray-200 dark:border-slate-700 p-4 space-y-3 ${cfg.cardBg}`}>
       <div className="flex items-start justify-between gap-2">
-        <p className="font-semibold text-gray-900 dark:text-white text-sm leading-snug flex-1">{app.program_title}</p>
+        {app.program_id ? (
+          <Link href={`/programs/${app.program_id}`}
+            className="font-semibold text-gray-900 dark:text-white text-sm leading-snug flex-1 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">
+            {app.program_title}
+          </Link>
+        ) : (
+          <p className="font-semibold text-gray-900 dark:text-white text-sm leading-snug flex-1">{app.program_title}</p>
+        )}
         <span className={`shrink-0 text-xs px-2 py-0.5 rounded-full font-medium ${cfg.badge}`}>
           {cfg.emoji} {cfg.label}
         </span>
@@ -669,7 +676,14 @@ function RoadmapView({ apps, onAddClick, onMoveApp, onEditApp, onDeleteApp, onRe
                 <div className="flex items-start justify-between gap-3 mb-3">
                   <div className="flex-1 min-w-0">
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${cfg.badgeCls}`}>{cfg.label}</span>
-                    <p className="font-semibold text-gray-900 dark:text-white text-sm mt-1.5 leading-snug">{app.program_title}</p>
+                    {app.program_id ? (
+                      <Link href={`/programs/${app.program_id}`}
+                        className="font-semibold text-gray-900 dark:text-white text-sm mt-1.5 leading-snug hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors block">
+                        {app.program_title}
+                      </Link>
+                    ) : (
+                      <p className="font-semibold text-gray-900 dark:text-white text-sm mt-1.5 leading-snug">{app.program_title}</p>
+                    )}
                     {app.managing_org && <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{app.managing_org}</p>}
                   </div>
                   {dd && <span className={`shrink-0 text-xs font-medium ${dd.color}`}>{dd.label}</span>}
