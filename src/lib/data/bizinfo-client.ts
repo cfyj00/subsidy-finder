@@ -401,6 +401,30 @@ export interface ParsedProgram {
   last_synced_at:       string;
 }
 
+// 제목의 [경남], [대구ㆍ경북], [서울] 등 지역 태그를 전체 시도명으로 변환
+const REGION_TAG_MAP: Record<string, string> = {
+  '서울': '서울특별시', '부산': '부산광역시', '대구': '대구광역시',
+  '인천': '인천광역시', '광주': '광주광역시', '대전': '대전광역시',
+  '울산': '울산광역시', '세종': '세종특별자치시', '경기': '경기도',
+  '강원': '강원특별자치도', '충북': '충청북도', '충남': '충청남도',
+  '전북': '전북특별자치도', '전남': '전라남도',
+  '경북': '경상북도', '경남': '경상남도', '제주': '제주특별자치도',
+};
+function extractRegionsFromTitle(title: string): string[] {
+  // "[경남]", "[대구ㆍ경북]", "[서울·경기]" 등 처리
+  const match = title.match(/^\[([^\]]+)\]/);
+  if (!match) return [];
+  const tag = match[1];
+  const result: string[] = [];
+  // ·, ㆍ, ,, / 등 구분자로 split
+  tag.split(/[·ㆍ,\/]/).forEach(part => {
+    const key = part.trim().slice(0, 2); // 앞 2글자로 매핑 (경남→경남)
+    const full = REGION_TAG_MAP[key] ?? REGION_TAG_MAP[part.trim()];
+    if (full && !result.includes(full)) result.push(full);
+  });
+  return result;
+}
+
 export function parseBizinfoItem(item: BizinfoListItem): ParsedProgram {
   const regions: string[] = [];
   if (item.ctpvNm) {
@@ -409,6 +433,10 @@ export function parseBizinfoItem(item: BizinfoListItem): ParsedProgram {
       const trimmed = r.trim();
       if (trimmed) regions.push(trimmed);
     });
+  }
+  // ctpvNm 없으면 제목의 [지역] 태그에서 추출
+  if (regions.length === 0) {
+    extractRegionsFromTitle(item.pblancNm ?? '').forEach(r => regions.push(r));
   }
 
   // reqstDt 우선, 없으면 pbancBgngYmd/pbancEndYmd fallback

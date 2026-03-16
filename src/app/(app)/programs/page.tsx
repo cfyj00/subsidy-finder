@@ -57,6 +57,29 @@ function sidoMatches(r: string, sido: string): boolean {
   return aliases.some(a => r.includes(a) || a.includes(r));
 }
 
+// 제목 "[경남]", "[대구ㆍ경북]" 패턴에서 지역 목록 추출 (bizinfo DB 기존 데이터 대응)
+const TITLE_REGION_MAP: Record<string, string> = {
+  '서울': '서울특별시', '부산': '부산광역시', '대구': '대구광역시',
+  '인천': '인천광역시', '광주': '광주광역시', '대전': '대전광역시',
+  '울산': '울산광역시', '세종': '세종특별자치시', '경기': '경기도',
+  '강원': '강원특별자치도', '충북': '충청북도', '충남': '충청남도',
+  '전북': '전북특별자치도', '전남': '전라남도',
+  '경북': '경상북도', '경남': '경상남도', '제주': '제주특별자치도',
+};
+function getEffectiveRegions(p: Program): string[] {
+  if (p.target_regions.length > 0) return p.target_regions;
+  // target_regions 없으면 제목 [지역] 태그 파싱
+  const match = p.title.match(/^\[([^\]]+)\]/);
+  if (!match) return [];
+  const result: string[] = [];
+  match[1].split(/[·ㆍ,\/]/).forEach(part => {
+    const key = part.trim().slice(0, 2);
+    const full = TITLE_REGION_MAP[key] ?? TITLE_REGION_MAP[part.trim()];
+    if (full && !result.includes(full)) result.push(full);
+  });
+  return result;
+}
+
 export default function ProgramsPage() {
   const router = useRouter();
   const { profile } = useProfile();
@@ -199,7 +222,7 @@ export default function ProgramsPage() {
       if (p.status === 'closed') return false;
 
       // 지역 하드 필터: 전국이거나 내 지역 포함 사업만 표시
-      const regions = p.target_regions;
+      const regions = getEffectiveRegions(p); // 제목 [지역] 파싱 포함
       const sido    = businessProfile.region_sido;
       const sigungu = businessProfile.region_sigungu;
 
@@ -209,13 +232,13 @@ export default function ProgramsPage() {
         );
         if (!isNationwide) {
           const inRegion = regions.some(r =>
-            (sido    && sidoMatches(r, sido))      ||
+            (sido    && sidoMatches(r, sido))  ||
             (sigungu && r.includes(sigungu))
           );
           if (!inRegion) return false;
         }
       } else {
-        // target_regions 미입력: source가 다른 지역 클라이언트면 제외
+        // 제목 파싱도 실패: source가 다른 지역 클라이언트면 제외
         const sourceSido = SOURCE_SIDO[p.source];
         if (sourceSido && !sidoMatches(sourceSido, sido)) return false;
       }
@@ -232,22 +255,20 @@ export default function ProgramsPage() {
     if (!businessProfile) return 1;
     const sido    = businessProfile.region_sido;
     const sigungu = businessProfile.region_sigungu;
-    const regions = p.target_regions;
+    const regions = getEffectiveRegions(p); // 제목 [지역] 파싱 포함
 
     if (regions.length > 0) {
       if (regions.some(r => r.includes('전국') || r.includes('전 지역') || r === '전체')) return 1;
       if (regions.some(r =>
-        (sido    && sidoMatches(r, sido))   ||
+        (sido    && sidoMatches(r, sido))  ||
         (sigungu && r.includes(sigungu))
       )) return 2;
-      return 0;
+      return 0; // 다른 지역 명시
     }
 
-    // target_regions 미입력 → source로 지역 추론
+    // 제목 파싱도 실패 → source로 지역 추론
     const sourceSido = SOURCE_SIDO[p.source];
-    if (sourceSido) {
-      return sidoMatches(sourceSido, sido) ? 2 : 0;
-    }
+    if (sourceSido) return sidoMatches(sourceSido, sido) ? 2 : 0;
     return 1; // 전국 소스
   };
 
