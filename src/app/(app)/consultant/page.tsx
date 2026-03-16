@@ -16,7 +16,7 @@ import {
 } from '@/lib/ai/prompt-generator';
 import type { BusinessProfile, Program } from '@/types/database';
 import {
-  Sparkles, Copy, Check, ExternalLink,
+  Sparkles, Copy, Check,
   ChevronRight, Loader2, AlertCircle, Send, Square,
   RefreshCw, Bot, User, Clock, ArrowLeft, Target,
   ChevronDown, ChevronUp,
@@ -584,8 +584,8 @@ function ConsultantContent() {
       <div className="flex items-start gap-3 px-4 py-3 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800 rounded-xl">
         <span className="text-xl mt-0.5">💡</span>
         <div className="text-sm text-indigo-800 dark:text-indigo-200">
-          <p className="font-semibold">프롬프트를 복사해서 Claude.ai나 ChatGPT에 붙여넣으세요</p>
-          <p className="text-xs text-indigo-600 dark:text-indigo-400 mt-0.5">내 사업 정보가 담긴 맞춤 프롬프트로 전문가 수준의 상담을 무료로 받을 수 있어요</p>
+          <p className="font-semibold">프롬프트를 복사해서 사용하시는 AI에 붙여 넣으세요</p>
+          <p className="text-xs text-indigo-600 dark:text-indigo-400 mt-0.5">내 사업 정보가 담긴 맞춤 프롬프트로 전문가 수준의 AI 상담을 받을 수 있어요</p>
         </div>
       </div>
 
@@ -670,7 +670,7 @@ function ConsultantContent() {
 
           {/* 복사 + 링크 버튼 */}
           <div className="px-5 py-4 border-t border-gray-100 dark:border-slate-700 bg-white dark:bg-slate-800">
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2 items-center">
               <button
                 onClick={handleCopy}
                 className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all ${
@@ -682,27 +682,14 @@ function ConsultantContent() {
                 {copied ? <Check size={15} /> : <Copy size={15} />}
                 {copied ? '복사됐어요!' : '프롬프트 복사'}
               </button>
-              <a
-                href="https://claude.ai"
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={handleCopy}
-                className="flex items-center gap-2 px-4 py-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-sm font-medium transition-colors"
-              >
-                <ExternalLink size={13} /> Claude.ai 열기
-              </a>
-              <a
-                href="https://chatgpt.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={handleCopy}
-                className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-medium transition-colors"
-              >
-                <ExternalLink size={13} /> ChatGPT 열기
-              </a>
+              {copied && (
+                <span className="text-sm text-emerald-600 dark:text-emerald-400 font-medium">
+                  ✓ 사용하시는 AI에 붙여 넣으세요 (Ctrl+V)
+                </span>
+              )}
             </div>
             <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
-              💡 링크 버튼을 클릭하면 프롬프트가 자동 복사돼요 — 열린 창에서 붙여넣기(Ctrl+V)하세요
+              💡 복사 후 Claude, ChatGPT, Gemini 등 사용하시는 AI 서비스에 붙여 넣으시면 됩니다
             </p>
           </div>
         </div>

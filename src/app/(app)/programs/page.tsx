@@ -96,8 +96,10 @@ export default function ProgramsPage() {
   const [filterMyBusiness, setFilterMyBusiness] = useState(false);
   const [sortBy, setSortBy] = useState<SortBy>('score');
   const [localFirst, setLocalFirst] = useState(false);
+  const [lowScoreMode, setLowScoreMode] = useState(false);
   const [seedLoading, setSeedLoading] = useState(false);
   const [seedMsg, setSeedMsg] = useState('');
+  const [bookmarkToast, setBookmarkToast] = useState(false);
   // 뉴스
   const [news, setNews] = useState<NaverNewsItem[]>([]);
   const [newsLoading, setNewsLoading] = useState(false);
@@ -157,7 +159,11 @@ export default function ProgramsPage() {
         match_score: matchResult.score, match_reasons: matchResult.reasons,
         mismatch_reasons: matchResult.mismatches, is_bookmarked: true,
       }).select().single();
-      if (newMatch) setMatches(prev => ({ ...prev, [programId]: newMatch as UserProgramMatch }));
+      if (newMatch) {
+        setMatches(prev => ({ ...prev, [programId]: newMatch as UserProgramMatch }));
+        setBookmarkToast(true);
+        setTimeout(() => setBookmarkToast(false), 3500);
+      }
     }
   };
 
@@ -193,18 +199,22 @@ export default function ProgramsPage() {
   };
 
   // 항상 최신 매칭 엔진으로 live 계산 (저장된 구 점수 무시)
-  const liveScores = useMemo(() => {
-    if (!businessProfile) return {} as Record<string, number>;
-    const map: Record<string, number> = {};
+  const liveMatches = useMemo(() => {
+    if (!businessProfile) return {} as Record<string, { score: number; reasons: string[] }>;
+    const map: Record<string, { score: number; reasons: string[] }> = {};
     for (const p of programs) {
-      map[p.id] = calculateMatch(businessProfile, p).score;
+      const r = calculateMatch(businessProfile, p);
+      map[p.id] = { score: r.score, reasons: r.reasons };
     }
     return map;
   }, [businessProfile, programs]);
 
   const getMatchScore = (programId: string): number | null => {
     if (!businessProfile) return null;
-    return liveScores[programId] ?? null;
+    return liveMatches[programId]?.score ?? null;
+  };
+  const getMatchReasons = (programId: string): string[] => {
+    return liveMatches[programId]?.reasons ?? [];
   };
 
   const bookmarkCount = Object.values(matches).filter(m => m.is_bookmarked).length;
@@ -244,7 +254,7 @@ export default function ProgramsPage() {
       }
 
       const score = getMatchScore(p.id) ?? 0;
-      if (score < 40) return false;
+      if (score < (lowScoreMode ? 25 : 40)) return false;
     }
     return true;
   });
@@ -334,6 +344,12 @@ export default function ProgramsPage() {
       {seedMsg && (
         <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm dark:bg-green-900/20 dark:border-green-800 dark:text-green-400">
           ✅ {seedMsg}
+        </div>
+      )}
+      {bookmarkToast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-4 py-3 bg-gray-900 dark:bg-slate-700 text-white rounded-2xl shadow-xl text-sm animate-in fade-in slide-in-from-bottom-2 duration-200">
+          <BookmarkCheck size={16} className="text-amber-400 flex-shrink-0" />
+          <span>북마크 완료! <Link href="/tracker" className="underline text-amber-300 font-medium">트래커에서 신청 관리</Link>하세요.</span>
         </div>
       )}
 
@@ -557,18 +573,55 @@ export default function ProgramsPage() {
           <Loader2 size={32} className="animate-spin text-indigo-400" />
         </div>
       ) : filteredPrograms.length === 0 ? (
-        <div className="text-center py-20">
-          <div className="text-4xl mb-3">{filterMyBusiness ? '🎯' : '🔍'}</div>
-          <p className="text-gray-500 dark:text-gray-400 font-medium">
-            {filterMyBusiness ? '매칭되는 사업이 없습니다' : '검색 결과가 없습니다'}
-          </p>
-          <p className="text-gray-400 dark:text-gray-500 text-sm mt-1">
-            {programs.length === 0
-              ? '"데이터 로드" 버튼을 눌러 지원사업을 불러오세요.'
-              : filterMyBusiness
-              ? '사업 프로필을 보완하거나 필터를 조정해 보세요.'
-              : '다른 키워드를 시도해 보세요. 예: 창업, 수출, R&D, 스마트팩토리, 인력지원'}
-          </p>
+        <div className="py-12 px-4">
+          {programs.length === 0 ? (
+            <div className="text-center py-8">
+              <div className="text-4xl mb-3">📭</div>
+              <p className="text-gray-500 dark:text-gray-400 font-medium">"데이터 로드" 버튼을 눌러 지원사업을 불러오세요.</p>
+            </div>
+          ) : filterMyBusiness ? (
+            <div className="space-y-4">
+              <div className="text-center">
+                <div className="text-4xl mb-2">🎯</div>
+                <p className="text-gray-700 dark:text-gray-300 font-semibold text-base">
+                  {lowScoreMode ? '참고할 만한 사업도 없습니다' : '딱 맞는 사업이 없습니다'}
+                </p>
+                <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">
+                  {lowScoreMode
+                    ? '현재 DB 사업 중 조건에 맞는 사업이 없습니다. 프로필을 보완하거나 지역·업종을 확인해보세요.'
+                    : '매칭 점수 40점 이상의 사업이 없습니다.'}
+                </p>
+              </div>
+              {!lowScoreMode && (
+                <div className="flex flex-col sm:flex-row gap-2 justify-center mt-4">
+                  <button
+                    onClick={() => setLowScoreMode(true)}
+                    className="flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300 rounded-xl text-sm font-medium hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-colors"
+                  >
+                    🔍 기준을 낮춰서 더 보기 (25점 이상)
+                  </button>
+                  <button
+                    onClick={() => { setFilterMyBusiness(false); setLowScoreMode(false); }}
+                    className="flex items-center justify-center gap-2 px-4 py-2.5 bg-gray-50 dark:bg-slate-700 border border-gray-200 dark:border-slate-600 text-gray-600 dark:text-gray-300 rounded-xl text-sm font-medium hover:bg-gray-100 dark:hover:bg-slate-600 transition-colors"
+                  >
+                    📋 전체 지원사업 보기
+                  </button>
+                  <Link
+                    href="/profile"
+                    className="flex items-center justify-center gap-2 px-4 py-2.5 bg-gray-50 dark:bg-slate-700 border border-gray-200 dark:border-slate-600 text-gray-600 dark:text-gray-300 rounded-xl text-sm font-medium hover:bg-gray-100 dark:hover:bg-slate-600 transition-colors"
+                  >
+                    ✏️ 프로필 보완하기
+                  </Link>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <div className="text-4xl mb-3">🔍</div>
+              <p className="text-gray-500 dark:text-gray-400 font-medium">검색 결과가 없습니다</p>
+              <p className="text-gray-400 dark:text-gray-500 text-sm mt-1">다른 키워드를 시도해 보세요. 예: 창업, 수출, R&D, 스마트팩토리, 인력지원</p>
+            </div>
+          )}
         </div>
       ) : (
         <div className="space-y-3">
@@ -613,11 +666,26 @@ export default function ProgramsPage() {
                     {program.description && (
                       <p className="text-sm text-gray-600 dark:text-gray-300 mt-1.5 line-clamp-2">{stripHtml(program.description)}</p>
                     )}
+                    {/* 내사업검색 모드: 매칭 이유 한 줄 */}
+                    {filterMyBusiness && score !== null && (() => {
+                      const reasons = getMatchReasons(program.id);
+                      return reasons.length > 0 ? (
+                        <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1.5 line-clamp-1">
+                          ✓ {reasons.slice(0, 2).join(' · ')}
+                        </p>
+                      ) : null;
+                    })()}
                     <div className="flex flex-wrap items-center gap-3 mt-2.5 text-xs text-gray-500 dark:text-gray-400">
-                      {program.funding_amount_max && (
+                      {program.funding_amount_max ? (
                         <span className="font-medium text-indigo-600 dark:text-indigo-400">
                           최대 {program.funding_amount_max.toLocaleString()}만원
                         </span>
+                      ) : program.funding_amount_min ? (
+                        <span className="font-medium text-indigo-600 dark:text-indigo-400">
+                          {program.funding_amount_min.toLocaleString()}만원~
+                        </span>
+                      ) : (
+                        <span className="text-gray-400 dark:text-gray-500">금액 미정</span>
                       )}
                       {program.status === 'expected' && program.typical_open_month ? (
                         <span className="font-medium text-violet-600 dark:text-violet-400">
