@@ -364,24 +364,24 @@ export default function ProgramDetailPage() {
                   {program.application_end && ` ~ ${format(new Date(program.application_end), 'yyyy.M.d')}`}
                 </InfoRow>
               ) : null}
-              {program.target_regions.length > 0 && (
+              {(program.target_regions ?? []).length > 0 && (
                 <InfoRow icon={<MapPin size={15} className="text-indigo-500" />} label="대상 지역">
-                  {program.target_regions[0] === '전국' ? '전국' : program.target_regions.join(', ')}
+                  {program.target_regions![0] === '전국' ? '전국' : program.target_regions!.join(', ')}
                 </InfoRow>
               )}
-              {program.target_company_size.length > 0 && (
+              {(program.target_company_size ?? []).length > 0 && (
                 <InfoRow icon={<Users size={15} className="text-indigo-500" />} label="대상 기업">
-                  {program.target_company_size.join(', ')}
+                  {program.target_company_size!.join(', ')}
                 </InfoRow>
               )}
-              {program.target_industries.length > 0 && (
+              {(program.target_industries ?? []).length > 0 && (
                 <InfoRow icon={<Tag size={15} className="text-indigo-500" />} label="대상 업종">
-                  {program.target_industries[0] === '전업종'
+                  {program.target_industries![0] === '전업종'
                     ? '전 업종'
                     : <>
-                        {program.target_industries.slice(0, 3).join(', ')}
-                        {program.target_industries.length > 3 && (
-                          <span className="text-gray-400"> 외 {program.target_industries.length - 3}개</span>
+                        {program.target_industries!.slice(0, 3).join(', ')}
+                        {program.target_industries!.length > 3 && (
+                          <span className="text-gray-400"> 외 {program.target_industries!.length - 3}개</span>
                         )}
                       </>
                   }

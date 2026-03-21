@@ -25,7 +25,8 @@ import { sidoMatches, SOURCE_SIDO, TITLE_REGION_MAP } from '@/lib/region-utils';
 type SortBy = 'score' | 'amount' | 'deadline';
 
 function getEffectiveRegions(p: Program): string[] {
-  if (p.target_regions.length > 0) return p.target_regions;
+  const regions = p.target_regions ?? [];
+  if (regions.length > 0) return regions;
   // target_regions 없으면 제목 [지역] 태그 파싱
   const match = p.title.match(/^\[([^\]]+)\]/);
   if (!match) return [];
@@ -181,7 +182,8 @@ export default function ProgramsPage() {
   let filteredPrograms = programs.filter(p => {
     if (searchQuery && !matchesSearch(p, searchQuery)) return false;
     if (filterRegion !== 'all') {
-      if (p.target_regions.length > 0 && !p.target_regions.includes('전국') && !p.target_regions.some(r => r.includes(filterRegion))) return false;
+      const tr = p.target_regions ?? [];
+      if (tr.length > 0 && !tr.includes('전국') && !tr.some(r => r.includes(filterRegion))) return false;
     }
     if (filterBookmarked && !matches[p.id]?.is_bookmarked) return false;
 
@@ -648,8 +650,8 @@ export default function ProgramsPage() {
                       {program.status === 'expected' && program.last_active_year && (
                         <span className="text-violet-500">작년({program.last_active_year}) 기준</span>
                       )}
-                      {program.target_regions.length > 0 && program.target_regions[0] !== '전국' && (
-                        <span>📍 {program.target_regions.slice(0, 2).join(', ')}{program.target_regions.length > 2 ? ' 외' : ''}</span>
+                      {(program.target_regions ?? []).length > 0 && program.target_regions![0] !== '전국' && (
+                        <span>📍 {program.target_regions!.slice(0, 2).join(', ')}{program.target_regions!.length > 2 ? ' 외' : ''}</span>
                       )}
                     </div>
                   </div>
