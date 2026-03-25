@@ -12,12 +12,19 @@ function LoginForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
+  const [rememberEmail, setRememberEmail] = useState(false);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
+  // 저장된 이메일 불러오기
   useEffect(() => {
+    const saved = localStorage.getItem('saved_email');
+    if (saved) {
+      setEmail(saved);
+      setRememberEmail(true);
+    }
     const msg = searchParams.get('message');
     if (msg === 'confirmed') setMessage('이메일 인증이 완료되었습니다. 로그인해 주세요.');
     if (msg === 'signout') setMessage('로그아웃 되었습니다.');
@@ -27,6 +34,12 @@ function LoginForm() {
     e.preventDefault();
     setLoading(true);
     setError('');
+    // 아이디 기억 처리
+    if (rememberEmail) {
+      localStorage.setItem('saved_email', email);
+    } else {
+      localStorage.removeItem('saved_email');
+    }
     const supabase = getSupabaseBrowser();
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
@@ -95,6 +108,21 @@ function LoginForm() {
               {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
             </button>
           </div>
+        </div>
+        {/* 아이디 기억 + 비밀번호 찾기 */}
+        <div className="flex items-center justify-between">
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={rememberEmail}
+              onChange={e => setRememberEmail(e.target.checked)}
+              className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+            />
+            <span className="text-sm text-gray-600 dark:text-gray-400">아이디 기억</span>
+          </label>
+          <Link href="/forgot-password" className="text-sm text-indigo-600 hover:text-indigo-700">
+            비밀번호 찾기
+          </Link>
         </div>
         <button
           type="submit"
