@@ -197,24 +197,29 @@ export default function PromptsPage() {
           <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide px-1">템플릿 선택</p>
           {TEMPLATES.map(t => {
             const locked = !isPremium && !FREE_TEMPLATE_IDS.includes(t.id);
+            const isSelected = selectedTemplate.id === t.id;
             return (
               <button
                 key={t.id}
-                onClick={() => !locked && setSelectedTemplate(t)}
+                onClick={() => setSelectedTemplate(t)}
                 className={`w-full text-left p-3 rounded-xl border transition-all ${
-                  locked
-                    ? 'border-slate-200 dark:border-slate-700 opacity-50 cursor-not-allowed'
-                    : selectedTemplate.id === t.id
+                  isSelected
                     ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/30'
+                    : locked
+                    ? 'border-amber-200 dark:border-amber-800/50 hover:border-amber-300 dark:hover:border-amber-700'
                     : 'border-slate-200 dark:border-slate-700 hover:border-indigo-300 dark:hover:border-indigo-600'
                 }`}
               >
                 <div className="flex items-center gap-2 mb-0.5">
-                  <t.icon size={15} className={selectedTemplate.id === t.id ? 'text-indigo-600' : 'text-slate-400'} />
-                  <span className={`text-sm font-medium flex-1 ${selectedTemplate.id === t.id ? 'text-indigo-700 dark:text-indigo-300' : 'text-slate-700 dark:text-slate-300'}`}>
+                  <t.icon size={15} className={isSelected ? 'text-indigo-600' : locked ? 'text-amber-400' : 'text-slate-400'} />
+                  <span className={`text-sm font-medium flex-1 ${isSelected ? 'text-indigo-700 dark:text-indigo-300' : 'text-slate-700 dark:text-slate-300'}`}>
                     {t.title}
                   </span>
-                  {locked && <Lock size={12} className="text-slate-400 flex-shrink-0" />}
+                  {locked && (
+                    <span className="flex items-center gap-0.5 px-1.5 py-0.5 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 rounded text-[10px] font-bold flex-shrink-0">
+                      <Lock size={9} /> PRO
+                    </span>
+                  )}
                 </div>
                 <p className="text-xs text-slate-400 dark:text-slate-500 pl-5">{t.desc}</p>
               </button>
@@ -250,12 +255,25 @@ export default function PromptsPage() {
 
           {/* 유료 기능 잠금 안내 */}
           {!isPremium && !FREE_TEMPLATE_IDS.includes(selectedTemplate.id) && (
-            <div className="rounded-xl border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/20 p-5 text-center">
-              <Lock size={20} className="text-indigo-400 mx-auto mb-2" />
-              <p className="text-sm font-semibold text-indigo-800 dark:text-indigo-300 mb-1">유료 템플릿이에요</p>
-              <p className="text-xs text-indigo-600 dark:text-indigo-400 mb-3">월 ₩4,900으로 5종 프롬프트를 모두 사용하세요</p>
-              <Link href="/upgrade" className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold transition-colors">
-                <Sparkles size={12} /> 업그레이드하기
+            <div className="rounded-xl border-2 border-amber-300 dark:border-amber-700 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 p-5">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-9 h-9 rounded-full bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center flex-shrink-0">
+                  <Lock size={16} className="text-amber-600 dark:text-amber-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-amber-900 dark:text-amber-200">프리미엄 전용 템플릿이에요</p>
+                  <p className="text-xs text-amber-700 dark:text-amber-400">이 프롬프트는 PRO 플랜에서만 사용할 수 있어요</p>
+                </div>
+              </div>
+              <ul className="text-xs text-amber-800 dark:text-amber-300 space-y-1 mb-4 pl-1">
+                <li>✅ 사업계획서 작성 프롬프트</li>
+                <li>✅ 자격요건 확인 프롬프트</li>
+                <li>✅ 서류 체크리스트 프롬프트</li>
+                <li>✅ 담당기관 문의 질문 프롬프트</li>
+                <li>✅ 심층 상담 (단일 사업) 프롬프트</li>
+              </ul>
+              <Link href="/upgrade" className="flex items-center justify-center gap-2 w-full py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white rounded-xl text-sm font-bold transition-all shadow-sm">
+                <Sparkles size={14} /> 월 ₩4,900으로 전체 잠금 해제
               </Link>
             </div>
           )}
