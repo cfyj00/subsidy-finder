@@ -12,6 +12,79 @@
 
 import { NextResponse } from 'next/server';
 import { createSupabaseAdmin } from '@/lib/supabase-admin';
+import { Resend } from 'resend';
+
+const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
+const FROM_EMAIL = process.env.RESEND_FROM_EMAIL ?? 'noreply@jisiljang.com';
+
+/** 마감 알림 이메일 HTML */
+function buildEmailHtml(opts: {
+  userName: string;
+  programTitle: string;
+  days: number;
+  emoji: string;
+  link: string;
+}): string {
+  const { userName, programTitle, days, emoji, link } = opts;
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://jisiljang.com';
+  const urgencyColor = days === 1 ? '#dc2626' : days <= 5 ? '#d97706' : '#4f46e5';
+  return `<!DOCTYPE html>
+<html lang="ko">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;padding:32px 16px;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.08);">
+        <!-- 헤더 -->
+        <tr><td style="background:linear-gradient(135deg,#4f46e5,#7c3aed);padding:28px 32px;">
+          <p style="margin:0;color:#c7d2fe;font-size:13px;">🤝 지실장</p>
+          <h1 style="margin:8px 0 0;color:#ffffff;font-size:22px;font-weight:700;">마감 ${emoji} D-${days}</h1>
+        </td></tr>
+        <!-- 본문 -->
+        <tr><td style="padding:28px 32px;">
+          <p style="margin:0 0 16px;color:#374151;font-size:15px;">${userName}님, 안녕하세요!</p>
+          <div style="background:#f1f5f9;border-left:4px solid ${urgencyColor};border-radius:0 8px 8px 0;padding:16px 20px;margin-bottom:20px;">
+            <p style="margin:0 0 4px;color:#64748b;font-size:12px;">신청 마감 ${days}일 전</p>
+            <p style="margin:0;color:#1e293b;font-size:16px;font-weight:600;">${programTitle}</p>
+          </div>
+          <p style="margin:0 0 24px;color:#64748b;font-size:14px;line-height:1.6;">
+            ${days === 1
+              ? '오늘이 마지막 기회예요! 지금 바로 서류를 최종 확인하고 접수하세요.'
+              : days <= 5
+              ? `마감까지 ${days}일밖에 남지 않았어요. 서류 준비 현황을 다시 한번 확인해 보세요.`
+              : `마감까지 ${days}일 남았어요. 미리미리 준비하면 합격률이 높아져요!`}
+          </p>
+          <a href="${appUrl}${link}" style="display:inline-block;background:${urgencyColor};color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:10px;font-size:14px;font-weight:600;">지원 현황 확인하기 →</a>
+        </td></tr>
+        <!-- 푸터 -->
+        <tr><td style="padding:20px 32px;border-top:1px solid #f1f5f9;">
+          <p style="margin:0;color:#94a3b8;font-size:12px;">알림 수신을 원하지 않으시면 <a href="${appUrl}/profile" style="color:#94a3b8;">프로필 설정</a>에서 변경하세요.</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+}
+
+/** 프리미엄 유저의 이메일 조회 */
+async function getUserEmail(admin: ReturnType<typeof createSupabaseAdmin>, userId: string): Promise<{ email: string; name: string } | null> {
+  const { data } = await admin.auth.admin.getUserById(userId);
+  if (!data?.user?.email) return null;
+  const isPremium = (data.user.user_metadata?.is_premium as boolean | undefined) ?? false;
+  // business_profiles에서 is_premium 확인
+  const { data: profile } = await admin
+    .from('business_profiles')
+    .select('is_premium, business_name')
+    .eq('user_id', userId)
+    .eq('is_premium', true)
+    .maybeSingle();
+  if (!profile?.is_premium) return null;
+  return {
+    email: data.user.email,
+    name: profile.business_name ?? data.user.email.split('@')[0],
+  };
+}
 
 const DEADLINE_DAYS = [30, 20, 10, 5, 1] as const;
 
@@ -88,6 +161,18 @@ export async function POST(req: Request) {
       errors.push(`알림 생성 실패(${app.id}): ${insertErr.message}`);
     } else {
       created++;
+      // 이메일 발송 (프리미엄 유저만)
+      if (resend) {
+        const user = await getUserEmail(admin, app.user_id);
+        if (user) {
+          await resend.emails.send({
+            from: FROM_EMAIL,
+            to: user.email,
+            subject: `[지실장] 마감 D-${days} ${emoji} "${title}"`,
+            html: buildEmailHtml({ userName: user.name, programTitle: title, days, emoji, link: '/applications' }),
+          }).catch(e => errors.push(`이메일 발송 실패: ${e.message}`));
+        }
+      }
     }
   }
 
@@ -135,6 +220,18 @@ export async function POST(req: Request) {
       errors.push(`북마크 알림 생성 실패: ${insertErr.message}`);
     } else {
       created++;
+      // 이메일 발송 (프리미엄 유저만)
+      if (resend) {
+        const user = await getUserEmail(admin, bm.user_id);
+        if (user) {
+          await resend.emails.send({
+            from: FROM_EMAIL,
+            to: user.email,
+            subject: `[지실장] 마감 D-${days} ${emoji} "${title}"`,
+            html: buildEmailHtml({ userName: user.name, programTitle: title, days, emoji, link: '/programs' }),
+          }).catch(e => errors.push(`이메일 발송 실패: ${e.message}`));
+        }
+      }
     }
   }
 
