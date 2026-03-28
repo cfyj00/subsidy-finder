@@ -7,7 +7,7 @@ import {
   Calendar, Building2, X, Check, CheckCircle2, XCircle, Circle,
   ClipboardList, ClipboardCheck, Banknote, StickyNote, Trophy,
   FolderOpen, Send, Clock, PartyPopper, Map,
-  MessageSquare, Loader2, LayoutList,
+  MessageSquare, Loader2, LayoutList, ExternalLink,
 } from 'lucide-react';
 import { getSupabaseBrowser } from '@/lib/supabase-browser';
 import type { UserApplication, ApplicationStatus } from '@/types/database';
@@ -127,12 +127,13 @@ const STAGE_GUIDE: Record<ApplicationStatus, {
   advanceTo?: ApplicationStatus;
 }> = {
   preparing: {
-    title: '서류 체크리스트',
+    title: '지실장 체크리스트',
     items: [
-      '신청 자격 요건 확인 (업종·업력·매출)',
-      '사업계획서 작성',
-      '필수 서류 준비 (사업자등록증, 재무제표 등)',
-      '온라인 신청서 작성 및 제출',
+      '📌 공식사이트에서 신청요건 직접 확인 (업종·업력·매출)',
+      '💬 AI 채팅으로 신청 전략 상담받기',
+      '📄 필수 서류 준비 (사업자등록증, 재무제표 등)',
+      '📝 사업계획서 작성',
+      '✅ 온라인 신청서 작성 및 제출',
     ],
     advanceLabel: '신청 완료로 기록',
     advanceTo: 'submitted',
@@ -269,6 +270,21 @@ function StageGuide({ app, onAdvance, onResult }: {
           )
         )}
       </div>
+
+      {/* 서류가이드 참조 배너 (준비중 단계에서만) */}
+      {app.status === 'preparing' && (
+        <Link
+          href="/documents"
+          className="flex items-center gap-2.5 p-2.5 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors"
+        >
+          <span className="text-lg shrink-0">📂</span>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-semibold text-amber-700 dark:text-amber-400">서류가이드 참조하기</p>
+            <p className="text-xs text-amber-600/70 dark:text-amber-500/70">필요한 서류 목록과 작성 팁을 확인해요</p>
+          </div>
+          <ChevronRight size={14} className="text-amber-400 shrink-0" />
+        </Link>
+      )}
 
       {/* 액션 버튼 */}
       {app.status === 'reviewing' ? (
@@ -608,25 +624,49 @@ function RoadmapView({ apps, onAddClick, onMoveApp, onEditApp, onDeleteApp, onRe
 
   if (apps.length === 0) {
     return (
-      <div className="text-center py-16">
-        <div className="text-4xl mb-3">📋</div>
-        <p className="font-semibold text-gray-700 dark:text-gray-300 mb-2">아직 추적 중인 지원사업이 없어요</p>
-        <p className="text-sm text-gray-400 dark:text-gray-500 mb-5">
-          지원사업 상세 페이지에서 &apos;지원 트래커에 추가&apos;를 눌러보세요
-        </p>
+      <div className="py-8 space-y-5">
+        {/* 안내 헤더 */}
+        <div className="text-center">
+          <div className="text-4xl mb-3">📋</div>
+          <p className="font-semibold text-gray-700 dark:text-gray-300 mb-1">아직 추적 중인 지원사업이 없어요</p>
+          <p className="text-sm text-gray-400 dark:text-gray-500">아래 순서로 따라오시면 쉽게 시작할 수 있어요!</p>
+        </div>
+
+        {/* 3단계 여정 가이드 */}
+        <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800 rounded-2xl p-4 space-y-3">
+          <p className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 uppercase tracking-wide">시작 가이드</p>
+          {[
+            { step: '1', icon: '🔍', label: '지원사업 탐색', desc: '지원사업 메뉴에서 내 사업에 맞는 프로그램을 찾아요', href: '/programs', cta: '지원사업 보러 가기 →' },
+            { step: '2', icon: '➕', label: '트래커에 추가', desc: '상세 페이지의 \'지원트래커에 추가하기\'를 클릭하면 여기에 자동으로 등록돼요', href: null, cta: null },
+            { step: '3', icon: '📂', label: '서류 준비 & 관리', desc: '단계별 체크리스트와 서류가이드로 서류를 준비해요', href: '/documents', cta: '서류가이드 보기 →' },
+          ].map(({ step, icon, label, desc, href, cta }) => (
+            <div key={step} className="flex items-start gap-3">
+              <div className="w-6 h-6 rounded-full bg-indigo-600 text-white text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">{step}</div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">{icon} {label}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{desc}</p>
+                {href && cta && (
+                  <Link href={href} className="text-xs text-indigo-600 dark:text-indigo-400 font-medium mt-1 inline-block hover:underline">{cta}</Link>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* CTA 버튼 */}
         <div className="flex justify-center gap-3">
-          <button
-            onClick={onAddClick}
-            className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-medium transition-colors"
-          >
-            <Plus size={15} /> 직접 추가하기
-          </button>
           <Link
             href="/programs"
+            className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-medium transition-colors"
+          >
+            🔍 지원사업 탐색하러 가기
+          </Link>
+          <button
+            onClick={onAddClick}
             className="inline-flex items-center gap-2 px-5 py-2.5 border border-gray-300 dark:border-slate-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-700 rounded-xl text-sm font-medium transition-colors"
           >
-            지원사업 탐색하기
-          </Link>
+            <Plus size={15} /> 직접 추가
+          </button>
         </div>
       </div>
     );
@@ -744,18 +784,19 @@ function RoadmapView({ apps, onAddClick, onMoveApp, onEditApp, onDeleteApp, onRe
 
               {/* 하단 액션 */}
               <div className="px-4 py-3 border-t border-gray-100 dark:border-slate-700 flex items-center gap-2">
-                {app.program_id && (
-                  <Link
-                    href={`/apply/${app.program_id}`}
+                {app.program_url && (
+                  <a
+                    href={app.program_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
                     className="flex items-center gap-1.5 text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-medium"
                   >
-                    지원 여정 가이드 <ChevronRight size={12} />
-                  </Link>
+                    <ExternalLink size={11} /> 공식사이트
+                  </a>
                 )}
                 <div className="flex-1" />
-                {/* 결과 입력은 StageGuide에서 처리 */}
                 <Link
-                  href={`/consultant?q=${encodeURIComponent(app.program_title + ' ' + nextAction(app.status))}`}
+                  href={`/consultant?programId=${app.program_id ?? ''}&q=${encodeURIComponent(app.program_title + ' ' + nextAction(app.status))}`}
                   className="flex items-center gap-1.5 text-xs text-gray-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
                 >
                   <MessageSquare size={12} /> AI 상담
@@ -899,7 +940,7 @@ export default function ApplicationsPage() {
     if (!user) { setLoading(false); return; }
     const { data } = await supabase
       .from('user_applications')
-      .select('id, user_id, program_id, program_title, managing_org, application_deadline, applied_amount, status, notes, created_at, updated_at')
+      .select('id, user_id, program_id, program_title, managing_org, application_deadline, applied_amount, status, notes, program_url, created_at, updated_at')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false });
     setApps((data as UserApplication[]) ?? []);

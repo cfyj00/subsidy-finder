@@ -12,6 +12,7 @@ export default function SignupPage() {
   const [name, setName] = useState('');
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState('');
 
@@ -22,6 +23,20 @@ export default function SignupPage() {
     special: /[^A-Za-z0-9]/.test(password),
   };
   const pwStrength = Object.values(pwChecks).filter(Boolean).length;
+
+  const handleGoogleLogin = async () => {
+    setGoogleLoading(true);
+    setError('');
+    const supabase = getSupabaseBrowser();
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: `${window.location.origin}/auth/callback` },
+    });
+    if (error) {
+      setError('Google 로그인에 실패했습니다. 잠시 후 다시 시도해 주세요.');
+      setGoogleLoading(false);
+    }
+  };
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -68,6 +83,32 @@ export default function SignupPage() {
   return (
     <>
       <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-6">회원가입</h2>
+
+      {/* Google 소셜 가입 */}
+      <button
+        type="button"
+        onClick={handleGoogleLogin}
+        disabled={googleLoading}
+        className="w-full flex items-center justify-center gap-3 py-2.5 px-4 border border-gray-300 dark:border-slate-600 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors mb-4 disabled:opacity-60"
+      >
+        {googleLoading ? (
+          <Loader2 size={18} className="animate-spin" />
+        ) : (
+          <svg width="18" height="18" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M47.5 24.5C47.5 22.6 47.3 20.8 47 19H24V29.5H37.2C36.6 32.5 34.8 35 32.1 36.7V43.3H40.1C44.7 39.1 47.5 32.3 47.5 24.5Z" fill="#4285F4"/>
+            <path d="M24 48C30.6 48 36.1 45.8 40.1 43.3L32.1 36.7C29.9 38.1 27.2 39 24 39C17.6 39 12.2 34.8 10.2 29.1H2V35.9C5.9 43.7 14.3 48 24 48Z" fill="#34A853"/>
+            <path d="M10.2 29.1C9.7 27.7 9.5 26.2 9.5 24.5C9.5 22.8 9.8 21.3 10.2 19.9V13.1H2C0.7 15.9 0 19.1 0 24.5C0 29.9 0.7 33.1 2 35.9L10.2 29.1Z" fill="#FBBC05"/>
+            <path d="M24 10C27.5 10 30.6 11.2 33 13.5L40.3 6.2C36.1 2.3 30.6 0 24 0C14.3 0 5.9 4.3 2 12.1L10.2 18.9C12.2 13.2 17.6 10 24 10Z" fill="#EA4335"/>
+          </svg>
+        )}
+        Google로 시작하기
+      </button>
+
+      <div className="flex items-center gap-3 mb-4">
+        <div className="flex-1 h-px bg-gray-200 dark:bg-slate-700" />
+        <span className="text-xs text-gray-400 dark:text-gray-500">또는 이메일로 가입</span>
+        <div className="flex-1 h-px bg-gray-200 dark:bg-slate-700" />
+      </div>
 
       {error && (
         <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm dark:bg-red-900/20 dark:border-red-800 dark:text-red-400">

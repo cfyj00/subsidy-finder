@@ -2,12 +2,14 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import {
   Newspaper, Search, User, MessageSquare, Sparkles,
-  FileText, ClipboardList, LogOut, Sun, Moon, X, BookOpen, GraduationCap,
+  FileText, ClipboardList, LogOut, Sun, Moon, X, BookOpen, GraduationCap, Zap,
 } from 'lucide-react';
 import { getSupabaseBrowser } from '@/lib/supabase-browser';
 import { useTheme } from '@/lib/theme';
+import { useProfile } from '@/lib/profile-context';
 import { NotificationBell } from './NotificationBell';
 
 const NAV_ITEMS = [
@@ -31,6 +33,10 @@ export function Sidebar({ onClose, mobile }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const { theme, toggleTheme } = useTheme();
+  const { profile } = useProfile();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const isPremium = profile?.is_premium ?? false;
 
   const handleSignOut = async () => {
     const supabase = getSupabaseBrowser();
@@ -78,6 +84,17 @@ export function Sidebar({ onClose, mobile }: SidebarProps) {
           );
         })}
       </nav>
+
+      {/* Upgrade CTA — 클라이언트 마운트 후 + 무료 유저에게만 표시 */}
+      {mounted && !isPremium && (
+        <div className="px-3 pb-2">
+          <Link href="/upgrade" onClick={onClose}
+            className="flex items-center gap-2 px-3 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white rounded-lg text-xs font-semibold transition-all">
+            <Zap size={14} className="flex-shrink-0" />
+            <span>프리미엄 업그레이드</span>
+          </Link>
+        </div>
+      )}
 
       {/* Footer */}
       <div className="px-3 py-4 border-t border-indigo-800/50 space-y-1">

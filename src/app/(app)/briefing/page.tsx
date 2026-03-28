@@ -10,6 +10,7 @@ import {
   ArrowRight, AlertTriangle, CheckCheck, Clock,
   Search, MessageSquare, ClipboardList, Loader2,
   Zap, Trophy, TrendingUp, Calendar, Lightbulb, BookOpen, History,
+  ChevronDown, ChevronUp,
 } from 'lucide-react';
 import { DAILY_TIPS } from '@/lib/constants';
 import { format, isToday, isTomorrow } from 'date-fns';
@@ -53,6 +54,7 @@ export default function BriefingPage() {
   const [matches, setMatches] = useState<UserProgramMatch[]>([]);
   const [expectedPrograms, setExpectedPrograms] = useState<Program[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showGuide, setShowGuide] = useState(true);
 
   const loadAll = useCallback(async () => {
     const supabase = getSupabaseBrowser();
@@ -60,7 +62,7 @@ export default function BriefingPage() {
     if (!user) { setLoading(false); return; }
 
     const [{ data: apps }, { data: progs }, { data: matchData }, { data: expectedProgs }] = await Promise.all([
-      supabase.from('user_applications').select('id, user_id, program_id, status, notes, created_at, updated_at').eq('user_id', user.id).order('created_at', { ascending: false }),
+      supabase.from('user_applications').select('id, user_id, program_id, program_title, program_url, status, notes, application_deadline, result_amount, created_at, updated_at').eq('user_id', user.id).order('created_at', { ascending: false }),
       supabase.from('programs').select('id, external_id, source, title, managing_org, category, subcategory, support_type, target_regions, target_industries, target_company_size, min_employee_count, max_employee_count, min_company_age, max_company_age, min_revenue, max_revenue, funding_amount_min, funding_amount_max, self_funding_ratio, application_start, application_end, status, description, eligibility_summary, detail_url, is_featured, is_recurring, typical_open_month, created_at').eq('status', 'open').order('is_featured', { ascending: false }).limit(20),
       supabase.from('user_program_matches').select('id, program_id, user_id, match_score, match_reasons, mismatch_reasons, is_bookmarked, is_dismissed, calculated_at, applied_at, notes').eq('user_id', user.id),
       supabase.from('programs').select('id, title, managing_org, category, support_type, target_regions, funding_amount_min, funding_amount_max, typical_open_month, status').eq('status', 'expected').order('typical_open_month', { ascending: true }).limit(10),
@@ -131,6 +133,89 @@ export default function BriefingPage() {
         </p>
       </div>
 
+      {/* ── 지실장 시작 가이드 (신규 사용자 또는 펼침 상태) ─────────────────── */}
+      {(applications.length === 0 || showGuide) && (
+        <div className={`mb-5 rounded-2xl border overflow-hidden ${
+          applications.length === 0
+            ? 'border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/20'
+            : 'border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800'
+        }`}>
+          {/* 헤더 */}
+          <button
+            type="button"
+            onClick={() => setShowGuide(v => !v)}
+            className="w-full flex items-center justify-between gap-2 px-4 py-3"
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-base">🗺️</span>
+              <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+                {applications.length === 0 ? '지실장과 함께 시작해요!' : '지원사업 이용 가이드'}
+              </span>
+            </div>
+            {applications.length > 0 && (
+              showGuide
+                ? <ChevronUp size={16} className="text-gray-400 shrink-0" />
+                : <ChevronDown size={16} className="text-gray-400 shrink-0" />
+            )}
+          </button>
+
+          {/* 4단계 여정 */}
+          {showGuide && (
+            <div className="px-4 pb-4 space-y-2.5">
+              <p className="text-xs text-gray-500 dark:text-gray-400 -mt-1">
+                아래 4단계를 따라가면 지원사업을 끝까지 관리할 수 있어요 ✨
+              </p>
+              {[
+                {
+                  step: '1', emoji: '🔍', label: '지원사업 탐색',
+                  desc: '내 사업 유형·지역에 맞는 프로그램을 찾아요',
+                  href: '/programs', cta: '지원사업 보기',
+                  color: 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-400',
+                },
+                {
+                  step: '2', emoji: '➕', label: '트래커에 추가',
+                  desc: '상세 페이지에서 \'지원트래커에 추가\'를 클릭해요',
+                  href: '/programs', cta: '지원사업으로',
+                  color: 'bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-400',
+                },
+                {
+                  step: '3', emoji: '📂', label: '서류 준비',
+                  desc: '서류가이드와 AI 채팅으로 서류를 준비해요',
+                  href: '/documents', cta: '서류가이드',
+                  color: 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400',
+                },
+                {
+                  step: '4', emoji: '💬', label: 'AI 상담 활용',
+                  desc: '지실장 AI에게 신청 전략과 사업계획서를 도움받아요',
+                  href: '/consultant', cta: 'AI 상담하기',
+                  color: 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400',
+                },
+              ].map(({ step, emoji, label, desc, href, cta, color }) => (
+                <Link key={step} href={href} className="flex items-center gap-3 p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-gray-100 dark:border-slate-700 hover:border-indigo-200 dark:hover:border-indigo-700 transition-colors group">
+                  <span className={`w-7 h-7 rounded-full ${color} text-xs font-bold flex items-center justify-center shrink-0`}>{step}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-gray-800 dark:text-gray-200">{emoji} {label}</p>
+                    <p className="text-xs text-gray-400 dark:text-gray-500 truncate">{desc}</p>
+                  </div>
+                  <span className="text-xs text-indigo-500 dark:text-indigo-400 font-medium shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">{cta} →</span>
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 가이드 토글 버튼 (applications > 0이고 가이드 닫혀있을 때) */}
+      {applications.length > 0 && !showGuide && (
+        <button
+          type="button"
+          onClick={() => setShowGuide(true)}
+          className="flex items-center gap-1.5 text-xs text-indigo-600 dark:text-indigo-400 mb-4 hover:underline"
+        >
+          <span>🗺️</span> 이용 가이드 보기 <ChevronDown size={12} />
+        </button>
+      )}
+
       {/* ── 통계 요약 ──────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-3 gap-3 mb-5">
         <StatCard label="진행 중" value={active.length} color="text-indigo-600 dark:text-indigo-400" icon={<ClipboardList size={14} />} />
@@ -194,7 +279,11 @@ export default function BriefingPage() {
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">👉 {nextAction(app.status)}</p>
                   </div>
                   {dd && (
-                    <span className={`shrink-0 text-xs font-medium ${dd.urgent ? 'text-red-500' : 'text-gray-400'}`}>
+                    <span className={`shrink-0 text-xs font-bold px-2 py-0.5 rounded-full ${
+                      dd.urgent
+                        ? 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400'
+                        : 'bg-gray-100 text-gray-500 dark:bg-slate-700 dark:text-gray-400'
+                    }`}>
                       {dd.label}
                     </span>
                   )}
@@ -270,7 +359,11 @@ export default function BriefingPage() {
                       <span className={`text-sm font-bold ${mi.color}`}>{score}</span>
                     )}
                     {dd && (
-                      <span className={`text-xs ${dd.urgent ? 'text-red-500 font-semibold' : 'text-gray-400'}`}>
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                        dd.urgent
+                          ? 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400'
+                          : 'bg-gray-100 text-gray-500 dark:bg-slate-700 dark:text-gray-400'
+                      }`}>
                         {dd.label}
                       </span>
                     )}

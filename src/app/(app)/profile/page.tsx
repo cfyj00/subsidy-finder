@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense } from 'react';
 import { getSupabaseBrowser } from '@/lib/supabase-browser';
 import { useProfile } from '@/lib/profile-context';
 import { useBusinessProfile } from '@/lib/business-profile-context';
@@ -154,13 +155,15 @@ function profileToForm(p: BusinessProfile): FormState {
 // ══════════════════════════════════════════════════════════════════════════════
 // 메인 페이지
 // ══════════════════════════════════════════════════════════════════════════════
-export default function ProfilePage() {
+function ProfileContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const isWelcome = searchParams.get('welcome') === 'true';
   const { profile, refresh: refreshProfile } = useProfile();
   const { allProfiles, activeProfile, refresh: refreshBP, setActive, deleteProfile } = useBusinessProfile();
 
   // 'list' | 'create' | 'edit'
-  const [mode, setMode] = useState<'list' | 'create' | 'edit'>('list');
+  const [mode, setMode] = useState<'list' | 'create' | 'edit'>(() => isWelcome ? 'create' : 'list');
   const [editingId, setEditingId] = useState<string | null>(null);
 
   // 위저드 상태
@@ -465,16 +468,29 @@ export default function ProfilePage() {
   // ── 위저드 뷰 (create / edit) ─────────────────────────────────────────────
   return (
     <div className="max-w-2xl mx-auto px-4 py-8">
+      {/* 신규 가입 환영 배너 */}
+      {isWelcome && mode === 'create' && (
+        <div className="bg-gradient-to-r from-indigo-600 to-violet-600 rounded-2xl p-5 text-white mb-6">
+          <p className="text-lg font-bold mb-1">환영해요! 🎉</p>
+          <p className="text-indigo-200 text-sm leading-relaxed">
+            사업 프로필을 등록하면 AI가 우리 사업에 딱 맞는 지원사업을 골라드려요.<br />
+            딱 5분이면 완료돼요!
+          </p>
+        </div>
+      )}
+
       {/* 헤더 */}
       <div className="mb-6">
-        <button
-          onClick={backToList}
-          className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white mb-4 transition-colors"
-        >
-          <ArrowLeft size={16} /> 프로필 목록으로
-        </button>
+        {!isWelcome && (
+          <button
+            onClick={backToList}
+            className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white mb-4 transition-colors"
+          >
+            <ArrowLeft size={16} /> 프로필 목록으로
+          </button>
+        )}
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-          {mode === 'create' ? '새 프로필 만들기' : '프로필 수정'}
+          {mode === 'create' ? (isWelcome ? '사업 정보 등록' : '새 프로필 만들기') : '프로필 수정'}
         </h1>
         <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">
           정확한 정보를 입력할수록 더 적합한 지원사업을 매칭해 드립니다.
@@ -739,5 +755,17 @@ export default function ProfilePage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function ProfilePage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center py-32">
+        <Loader2 size={32} className="animate-spin text-indigo-400" />
+      </div>
+    }>
+      <ProfileContent />
+    </Suspense>
   );
 }

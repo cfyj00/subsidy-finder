@@ -25,6 +25,7 @@ interface TopMatch {
 export default function DashboardPage() {
   const router = useRouter();
   const { profile, loading: profileLoading } = useProfile();
+  const isPremium = profile?.is_premium ?? false;
   const { activeProfile: businessProfile, loading: bpLoading } = useBusinessProfile();
   const [topMatches, setTopMatches] = useState<TopMatch[]>([]);
   const [urgentPrograms, setUrgentPrograms] = useState<Program[]>([]);
@@ -52,7 +53,7 @@ export default function DashboardPage() {
         return { program: p, match: { ...matchInfo, score: result.score, reasons: result.reasons } };
       });
       scored.sort((a, b) => b.match.score - a.match.score);
-      setTopMatches(scored.slice(0, 5));
+      setTopMatches(scored.slice(0, 5)); // 5개 저장, 표시는 premium 여부로 제한
 
       // Urgent: active programs with deadline within 14 days
       const urgent = programs.filter(p => {
@@ -218,7 +219,7 @@ export default function DashboardPage() {
             </div>
           ) : (
             <div className="space-y-2">
-              {topMatches.map(({ program, match }, i) => {
+              {topMatches.slice(0, isPremium ? 5 : 3).map(({ program, match }, i) => {
                 const daysLeft = program.application_end
                   ? differenceInDays(new Date(program.application_end), new Date())
                   : null;
@@ -256,6 +257,16 @@ export default function DashboardPage() {
                   </Link>
                 );
               })}
+              {/* 무료 유저 업그레이드 CTA */}
+              {!isPremium && topMatches.length > 3 && (
+                <Link href="/upgrade"
+                  className="flex items-center justify-between px-4 py-3 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-xl hover:bg-indigo-100 dark:hover:bg-indigo-900/30 transition-colors">
+                  <span className="text-sm text-indigo-700 dark:text-indigo-300 font-medium">
+                    🔒 4위~5위 결과 더 보기
+                  </span>
+                  <span className="text-xs text-indigo-500 dark:text-indigo-400">월 ₩4,900 →</span>
+                </Link>
+              )}
             </div>
           )}
         </div>

@@ -1,9 +1,11 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Copy, Check, FileText, Search, ClipboardList, MessageSquare, Lightbulb, ChevronDown } from 'lucide-react';
+import { Copy, Check, FileText, Search, ClipboardList, MessageSquare, Lightbulb, ChevronDown, Lock, Sparkles } from 'lucide-react';
+import Link from 'next/link';
 import { getSupabaseBrowser } from '@/lib/supabase-browser';
 import { useBusinessProfile } from '@/lib/business-profile-context';
+import { useProfile } from '@/lib/profile-context';
 import type { Program } from '@/types/database';
 import {
   generateConsultingPrompt,
@@ -97,8 +99,13 @@ function CopyButton({ text }: { text: string }) {
 }
 
 
+// 무료 사용 가능한 템플릿 ID
+const FREE_TEMPLATE_IDS = ['consulting'];
+
 // ── 메인 페이지 ────────────────────────────────────────────────────────────────
 export default function PromptsPage() {
+  const { profile: userProfile } = useProfile();
+  const isPremium = userProfile?.is_premium ?? false;
   const { activeProfile: profile, loading: profileLoading } = useBusinessProfile();
   const [programs, setPrograms] = useState<Program[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState<Template>(TEMPLATES[0]);
@@ -168,7 +175,7 @@ export default function PromptsPage() {
     return (
       <div className="max-w-xl mx-auto mt-20 text-center p-8">
         <p className="text-slate-500 dark:text-slate-400 mb-4">프롬프트를 생성하려면 먼저 사업 프로필을 등록해 주세요.</p>
-        <a href="/profile" className="text-indigo-600 font-medium hover:underline">프로필 등록하기 →</a>
+        <Link href="/profile" className="text-indigo-600 font-medium hover:underline">프로필 등록하기 →</Link>
       </div>
     );
   }
@@ -188,25 +195,31 @@ export default function PromptsPage() {
         {/* 왼쪽: 템플릿 목록 */}
         <div className="space-y-2">
           <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide px-1">템플릿 선택</p>
-          {TEMPLATES.map(t => (
-            <button
-              key={t.id}
-              onClick={() => setSelectedTemplate(t)}
-              className={`w-full text-left p-3 rounded-xl border transition-all ${
-                selectedTemplate.id === t.id
-                  ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/30'
-                  : 'border-slate-200 dark:border-slate-700 hover:border-indigo-300 dark:hover:border-indigo-600'
-              }`}
-            >
-              <div className="flex items-center gap-2 mb-0.5">
-                <t.icon size={15} className={selectedTemplate.id === t.id ? 'text-indigo-600' : 'text-slate-400'} />
-                <span className={`text-sm font-medium ${selectedTemplate.id === t.id ? 'text-indigo-700 dark:text-indigo-300' : 'text-slate-700 dark:text-slate-300'}`}>
-                  {t.title}
-                </span>
-              </div>
-              <p className="text-xs text-slate-400 dark:text-slate-500 pl-5">{t.desc}</p>
-            </button>
-          ))}
+          {TEMPLATES.map(t => {
+            const locked = !isPremium && !FREE_TEMPLATE_IDS.includes(t.id);
+            return (
+              <button
+                key={t.id}
+                onClick={() => !locked && setSelectedTemplate(t)}
+                className={`w-full text-left p-3 rounded-xl border transition-all ${
+                  locked
+                    ? 'border-slate-200 dark:border-slate-700 opacity-50 cursor-not-allowed'
+                    : selectedTemplate.id === t.id
+                    ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/30'
+                    : 'border-slate-200 dark:border-slate-700 hover:border-indigo-300 dark:hover:border-indigo-600'
+                }`}
+              >
+                <div className="flex items-center gap-2 mb-0.5">
+                  <t.icon size={15} className={selectedTemplate.id === t.id ? 'text-indigo-600' : 'text-slate-400'} />
+                  <span className={`text-sm font-medium flex-1 ${selectedTemplate.id === t.id ? 'text-indigo-700 dark:text-indigo-300' : 'text-slate-700 dark:text-slate-300'}`}>
+                    {t.title}
+                  </span>
+                  {locked && <Lock size={12} className="text-slate-400 flex-shrink-0" />}
+                </div>
+                <p className="text-xs text-slate-400 dark:text-slate-500 pl-5">{t.desc}</p>
+              </button>
+            );
+          })}
         </div>
 
         {/* 오른쪽: 프롬프트 영역 */}
@@ -235,7 +248,20 @@ export default function PromptsPage() {
             </div>
           )}
 
+          {/* 유료 기능 잠금 안내 */}
+          {!isPremium && !FREE_TEMPLATE_IDS.includes(selectedTemplate.id) && (
+            <div className="rounded-xl border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/20 p-5 text-center">
+              <Lock size={20} className="text-indigo-400 mx-auto mb-2" />
+              <p className="text-sm font-semibold text-indigo-800 dark:text-indigo-300 mb-1">유료 템플릿이에요</p>
+              <p className="text-xs text-indigo-600 dark:text-indigo-400 mb-3">월 ₩4,900으로 5종 프롬프트를 모두 사용하세요</p>
+              <Link href="/upgrade" className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold transition-colors">
+                <Sparkles size={12} /> 업그레이드하기
+              </Link>
+            </div>
+          )}
+
           {/* 생성된 프롬프트 */}
+          {(isPremium || FREE_TEMPLATE_IDS.includes(selectedTemplate.id)) && (
           <div className={`rounded-xl border p-4 ${selectedTemplate.color}`}>
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
@@ -252,6 +278,7 @@ export default function PromptsPage() {
               <p className="text-sm text-slate-400">프롬프트를 생성 중...</p>
             )}
           </div>
+          )}
 
         </div>
       </div>

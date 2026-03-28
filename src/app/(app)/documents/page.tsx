@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react';
 import {
   Search, ChevronDown, ChevronUp, ExternalLink,
   Clock, DollarSign, AlertTriangle, Lightbulb,
-  ListChecks, CheckCircle2, Building2, FileText,
+  ListChecks, CheckCircle2, Building2, FileText, Star,
 } from 'lucide-react';
 import {
   DOCUMENT_GUIDES,
@@ -14,6 +14,7 @@ import {
   type DocumentCategory,
   type DocumentGuide,
 } from '@/lib/data/documents';
+import { useBusinessProfile } from '@/lib/business-profile-context';
 
 // ─── 개별 카드 ────────────────────────────────────────────────────────────────
 function DocCard({ doc }: { doc: DocumentGuide }) {
@@ -176,8 +177,31 @@ function DocCard({ doc }: { doc: DocumentGuide }) {
 
 // ─── 메인 페이지 ──────────────────────────────────────────────────────────────
 export default function DocumentsPage() {
+  const { activeProfile: profile } = useBusinessProfile();
   const [search, setSearch] = useState('');
   const [activeCategory, setActiveCategory] = useState<DocumentCategory | '전체'>('전체');
+
+  // 프로필 기반 추천 서류 ID 목록
+  const recommendedDocIds = useMemo(() => {
+    const ids: string[] = ['business-reg', 'tax-cert', 'national-insurance'];  // 기본 필수
+    if (!profile) return ids;
+    const isCorp = profile.business_entity_type === '법인';
+    const isManufacturing = profile.business_type?.includes('제조') ||
+      profile.business_category?.includes('제조') ||
+      profile.industry_code?.startsWith('C');
+    const hasExport = profile.has_export;
+    const isVenture = profile.is_venture;
+    const isInnobiz = profile.is_innobiz;
+
+    if (isCorp) ids.push('corp-reg', 'financial-stmt');
+    if (!isCorp) ids.push('financial-stmt');
+    if (isManufacturing) ids.push('facility-reg');
+    if (hasExport) ids.push('export-cert');
+    if (isVenture) ids.push('venture-cert');
+    if (isInnobiz) ids.push('innobiz-cert');
+    ids.push('business-plan');  // 항상 추천
+    return [...new Set(ids)];
+  }, [profile]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -226,6 +250,39 @@ export default function DocumentsPage() {
           신청 직전에 발급하는 것이 좋아요!
         </p>
       </div>
+
+      {/* 프로필 기반 추천 서류 */}
+      {profile && recommendedDocIds.length > 0 && (
+        <div className="bg-white dark:bg-slate-800 border border-indigo-200 dark:border-indigo-700 rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Star size={15} className="text-amber-400 fill-amber-400" />
+            <p className="text-sm font-semibold text-gray-900 dark:text-white">
+              {profile.business_name}에 필요한 서류
+            </p>
+            <span className="ml-auto text-xs text-indigo-500 dark:text-indigo-400 font-medium">
+              {profile.business_entity_type ?? ''}
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {recommendedDocIds
+              .map(id => DOCUMENT_GUIDES.find(d => d.id === id))
+              .filter((d): d is DocumentGuide => !!d)
+              .map(doc => (
+                <button
+                  key={doc.id}
+                  onClick={() => {
+                    setActiveCategory('전체');
+                    setSearch(doc.name);
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-700 rounded-full text-xs font-medium text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors"
+                >
+                  <span>{CATEGORY_META[doc.category].emoji}</span>
+                  {doc.name}
+                </button>
+              ))}
+          </div>
+        </div>
+      )}
 
       {/* 검색 + 필터 */}
       <div className="space-y-3">

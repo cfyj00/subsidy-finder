@@ -284,9 +284,9 @@ export default function ApplyPage() {
 
         {/* ── 2단계: 서류 준비 ─────────────────────────────────────────────── */}
         <StepCard step={STEPS[1]} index={1} current={currentStep}>
-          {program.required_documents.length > 0 ? (
+          {(program.required_documents?.length ?? 0) > 0 ? (
             <div className="space-y-2">
-              {program.required_documents.map((doc, i) => (
+              {(program.required_documents ?? []).map((doc, i) => (
                 <div key={i} className="flex items-center justify-between gap-2 text-sm">
                   <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
                     <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 shrink-0" />

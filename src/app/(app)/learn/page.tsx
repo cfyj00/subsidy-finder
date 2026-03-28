@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
   ChevronDown, ChevronUp, BookOpen, Lightbulb, Target,
@@ -334,7 +334,11 @@ const LEARN_ITEMS: LearnItem[] = [
 
 export default function LearnPage() {
   const [openId, setOpenId] = useState<string | null>('what');
-  const randomTips = [...DAILY_TIPS].sort(() => 0.5 - Math.random()).slice(0, 4);
+  const [randomTips, setRandomTips] = useState(DAILY_TIPS.slice(0, 4));
+
+  useEffect(() => {
+    setRandomTips([...DAILY_TIPS].sort(() => 0.5 - Math.random()).slice(0, 4));
+  }, []);
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6">

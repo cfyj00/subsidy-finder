@@ -80,7 +80,7 @@ export async function POST(req: Request) {
   // 4. Gemini 스트리밍
   try {
     const result = streamText({
-      model: google('gemini-2.0-flash'),
+      model: google('gemini-2.5-flash'),
       system,
       messages: messages.map((m) => ({
         role: m.role as 'user' | 'assistant',

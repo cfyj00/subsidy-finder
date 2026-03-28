@@ -111,6 +111,7 @@ export interface UserApplication {
   submitted_at: string | null;
   result_at: string | null;
   notes: string | null;
+  program_url: string | null;           // 공식 사이트 URL
   created_at: string;
   updated_at: string;
 }

@@ -98,8 +98,8 @@ function buildProgramBlock(program: Program, includeDescription = true): string 
     includeDescription && program.eligibility_summary && `\n**신청 자격:**\n${program.eligibility_summary}`,
     includeDescription && program.description &&
       `\n**사업 개요:**\n${program.description.slice(0, 600)}${program.description.length > 600 ? '...' : ''}`,
-    program.required_documents.length > 0 &&
-      `\n**필요 서류:**\n${program.required_documents.map(d => `- ${d}`).join('\n')}`,
+    (program.required_documents?.length ?? 0) > 0 &&
+      `\n**필요 서류:**\n${(program.required_documents ?? []).map(d => `- ${d}`).join('\n')}`,
   ].filter(Boolean).join('\n');
 }
 

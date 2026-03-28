@@ -33,79 +33,132 @@ interface AddAppModalProps {
 }
 
 function AddAppModal({ program, onClose, onAdded }: AddAppModalProps) {
+  const router = useRouter();
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
+  const [done, setDone] = useState(false);
+  const [insertError, setInsertError] = useState('');
 
   const handleAdd = async () => {
     setSaving(true);
+    setInsertError('');
     const supabase = getSupabaseBrowser();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setSaving(false); return; }
 
-    await supabase.from('user_applications').insert({
+    const { error } = await supabase.from('user_applications').insert({
       user_id: user.id,
       program_id: program.id,
       program_title: program.title,
       managing_org: program.managing_org ?? null,
       application_deadline: program.application_end ?? null,
+      program_url: program.detail_url ?? null,
       status: 'preparing',
       notes: notes.trim() || null,
     });
     setSaving(false);
+    if (error) {
+      if (error.code === '23505') {
+        // Duplicate — treat as already added
+        onAdded();
+        setDone(true);
+      } else {
+        setInsertError('추가 중 오류가 발생했어요. 다시 시도해 주세요.');
+      }
+      return;
+    }
     onAdded();
+    setDone(true);
   };
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 w-full max-w-md shadow-2xl">
-        <div className="flex items-start justify-between mb-4">
-          <div>
-            <h3 className="font-bold text-gray-900 dark:text-white">지원 관리에 추가</h3>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">칸반 보드에서 진행 상황을 추적합니다</p>
-          </div>
-          <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
-            <X size={20} />
-          </button>
-        </div>
 
-        {/* Program preview */}
-        <div className="bg-gray-50 dark:bg-slate-700/50 rounded-xl p-3 mb-4">
-          <p className="font-medium text-sm text-gray-900 dark:text-white line-clamp-2">{program.title}</p>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{program.managing_org}</p>
-          {program.application_end && (
-            <p className="text-xs text-amber-600 dark:text-amber-400 mt-1.5">
-              📅 마감 {format(new Date(program.application_end), 'yyyy.M.d (EEE)', { locale: ko })}
+        {done ? (
+          /* ── 추가 완료 화면 ── */
+          <div className="text-center py-2">
+            <div className="w-14 h-14 bg-emerald-100 dark:bg-emerald-900/40 rounded-full flex items-center justify-center mx-auto mb-4">
+              <CheckCheck size={28} className="text-emerald-600 dark:text-emerald-400" />
+            </div>
+            <h3 className="font-bold text-gray-900 dark:text-white mb-1">지원트래커에 추가됐어요!</h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-6">
+              지원관리에서 서류 준비부터 결과까지 단계별로 관리하세요.
             </p>
-          )}
-        </div>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => router.push('/applications')}
+                className="w-full flex items-center justify-center gap-2 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold transition-colors"
+              >
+                <PlayCircle size={15} /> 지원관리에서 확인하기 →
+              </button>
+              <button
+                onClick={onClose}
+                className="w-full py-2.5 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+              >
+                이 페이지에 계속 있기
+              </button>
+            </div>
+          </div>
+        ) : (
+          /* ── 입력 화면 ── */
+          <>
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <h3 className="font-bold text-gray-900 dark:text-white">지원트래커에 추가</h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">서류 준비 → 신청 → 결과까지 단계별로 관리해요</p>
+              </div>
+              <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
+                <X size={20} />
+              </button>
+            </div>
 
-        <div className="mb-4">
-          <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">메모 <span className="text-gray-400">(선택)</span></label>
-          <textarea
-            value={notes}
-            onChange={e => setNotes(e.target.value)}
-            placeholder="준비 사항, 담당자 연락처, 신청 링크 등..."
-            rows={3}
-            className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
-          />
-        </div>
+            {/* Program preview */}
+            <div className="bg-gray-50 dark:bg-slate-700/50 rounded-xl p-3 mb-4">
+              <p className="font-medium text-sm text-gray-900 dark:text-white line-clamp-2">{program.title}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{program.managing_org}</p>
+              {program.application_end && (
+                <p className="text-xs text-amber-600 dark:text-amber-400 mt-1.5">
+                  📅 마감 {format(new Date(program.application_end), 'yyyy.M.d (EEE)', { locale: ko })}
+                </p>
+              )}
+            </div>
 
-        <div className="flex gap-2">
-          <button
-            onClick={onClose}
-            className="flex-1 py-2.5 border border-gray-300 dark:border-slate-600 rounded-xl text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
-          >
-            취소
-          </button>
-          <button
-            onClick={handleAdd}
-            disabled={saving}
-            className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl text-sm font-medium transition-colors"
-          >
-            {saving ? <Loader2 size={14} className="animate-spin" /> : <PlusCircle size={14} />}
-            추가하기
-          </button>
-        </div>
+            <div className="mb-4">
+              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">메모 <span className="text-gray-400">(선택)</span></label>
+              <textarea
+                value={notes}
+                onChange={e => setNotes(e.target.value)}
+                placeholder="준비 사항, 담당자 연락처 등..."
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+              />
+            </div>
+
+            {insertError && (
+              <div className="mb-3 p-2.5 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-xs text-red-600 dark:text-red-400">
+                {insertError}
+              </div>
+            )}
+
+            <div className="flex gap-2">
+              <button
+                onClick={onClose}
+                className="flex-1 py-2.5 border border-gray-300 dark:border-slate-600 rounded-xl text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleAdd}
+                disabled={saving}
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl text-sm font-medium transition-colors"
+              >
+                {saving ? <Loader2 size={14} className="animate-spin" /> : <PlusCircle size={14} />}
+                추가하기
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -510,7 +563,7 @@ export default function ProgramDetailPage() {
         )}
 
         {/* ── Required Documents ────────────────────────────────────────────────── */}
-        {program.required_documents.length > 0 && (
+        {(program.required_documents?.length ?? 0) > 0 && (
           <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl p-5 mb-4">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">제출 서류</h2>
@@ -522,7 +575,7 @@ export default function ProgramDetailPage() {
               </Link>
             </div>
             <ul className="space-y-2 mb-3">
-              {program.required_documents.map((doc, i) => (
+              {(program.required_documents ?? []).map((doc, i) => (
                 <li key={i} className="flex items-center justify-between gap-2 group">
                   <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 flex-1 min-w-0">
                     <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 flex-shrink-0" />
@@ -598,54 +651,92 @@ export default function ProgramDetailPage() {
           </div>
         )}
 
-        {/* ── CTA ───────────────────────────────────────────────────────────────── */}
+        {/* ── 지실장 가이드 ───────────────────────────────────────────────────── */}
         <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl p-5">
-          <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-4 uppercase tracking-wide">다음 단계</h2>
-          <div className="flex flex-col gap-3">
-            {/* 지원하기 — 주 CTA */}
-            <Link
-              href={`/apply/${id}`}
-              className="flex items-center justify-center gap-2 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-semibold text-sm transition-colors shadow-sm"
-            >
-              <PlayCircle size={16} /> 지원하기 — 단계별 가이드 보기
-            </Link>
+          {/* 지실장 헤더 */}
+          <div className="flex items-center gap-2.5 mb-4 pb-3.5 border-b border-gray-100 dark:border-slate-700">
+            <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center text-base flex-shrink-0">🤝</div>
+            <div>
+              <p className="text-sm font-semibold text-gray-900 dark:text-white">지실장이 안내해 드릴게요</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500">순서대로 따라오시면 돼요!</p>
+            </div>
+          </div>
 
-            <div className="flex flex-col sm:flex-row gap-3">
-              {/* Add to tracker */}
-              <button
-                onClick={() => !addedToTracker && setShowAddModal(true)}
-                disabled={addedToTracker}
-                className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl font-medium text-sm transition-colors border ${
-                  addedToTracker
-                    ? 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:border-emerald-700 dark:text-emerald-400 cursor-default'
-                    : 'border-indigo-300 dark:border-indigo-700 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20'
-                }`}
+          <div className="space-y-2.5">
+            {/* STEP 1 — 공식사이트 확인 */}
+            {program.detail_url ? (
+              <a
+                href={program.detail_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-3 p-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl transition-colors group"
               >
-                {addedToTracker
-                  ? <><CheckCheck size={15} /> 트래커에 추가됨</>
-                  : <><PlusCircle size={15} /> 트래커에 추가</>
-                }
-              </button>
+                <span className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center text-xs font-bold flex-shrink-0">1</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold">공식사이트에서 신청요건 확인</p>
+                  <p className="text-xs text-indigo-200 mt-0.5">업종·매출·업력 조건을 직접 확인하세요</p>
+                </div>
+                <ExternalLink size={15} className="flex-shrink-0 opacity-70 group-hover:opacity-100" />
+              </a>
+            ) : (
+              <div className="flex items-center gap-3 p-3.5 bg-gray-100 dark:bg-slate-700 rounded-xl">
+                <span className="w-6 h-6 rounded-full bg-gray-300 dark:bg-slate-500 flex items-center justify-center text-xs font-bold flex-shrink-0 text-gray-600 dark:text-gray-300">1</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-gray-500 dark:text-gray-400">공식사이트 정보 없음</p>
+                  <p className="text-xs text-gray-400 mt-0.5">주관기관에 직접 문의해 보세요</p>
+                </div>
+              </div>
+            )}
 
-              {/* AI consult */}
+            {/* STEP 2 — 지원트래커 추가 */}
+            {addedToTracker ? (
               <Link
-                href={`/consultant?programId=${id}&q=${encodeURIComponent(program.title + ' 지원사업 신청 전략 알려줘')}`}
-                className="flex-1 flex items-center justify-center gap-2 py-2.5 border border-gray-300 dark:border-slate-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-700 rounded-xl font-medium text-sm transition-colors"
+                href="/applications"
+                className="w-full flex items-center gap-3 p-3.5 rounded-xl transition-colors border border-emerald-300 bg-emerald-50 dark:bg-emerald-900/20 dark:border-emerald-700 hover:bg-emerald-100 dark:hover:bg-emerald-900/30"
               >
-                🎯 AI 상담
+                <span className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400">✓</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">지원관리에서 확인하기 →</p>
+                  <p className="text-xs text-emerald-500 dark:text-emerald-600 mt-0.5">서류준비 · 신청 · 결과 단계별 관리</p>
+                </div>
+                <PlayCircle size={15} className="flex-shrink-0 text-emerald-500" />
               </Link>
+            ) : (
+              <button
+                onClick={() => setShowAddModal(true)}
+                className="w-full flex items-center gap-3 p-3.5 rounded-xl transition-colors border border-gray-200 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700"
+              >
+                <span className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 bg-gray-100 dark:bg-slate-600 text-gray-600 dark:text-gray-300">2</span>
+                <div className="flex-1 min-w-0 text-left">
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">지원트래커에 추가하기</p>
+                  <p className="text-xs text-gray-400 mt-0.5">서류준비 → 신청 → 결과까지 단계별 관리</p>
+                </div>
+                <PlusCircle size={15} className="flex-shrink-0 text-gray-400" />
+              </button>
+            )}
 
-              {/* Official site */}
-              {program.detail_url && (
-                <a
-                  href={program.detail_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex-1 flex items-center justify-center gap-2 py-2.5 border border-gray-300 dark:border-slate-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-700 rounded-xl font-medium text-sm transition-colors"
-                >
-                  <ExternalLink size={14} /> 공식 사이트
-                </a>
-              )}
+            {/* STEP 3 — AI 상담 */}
+            <div className="flex gap-2">
+              <Link
+                href={`/consultant?programId=${id}`}
+                className="flex-1 flex items-center gap-2.5 p-3 border border-violet-200 dark:border-violet-800 hover:bg-violet-50 dark:hover:bg-violet-900/20 rounded-xl transition-colors"
+              >
+                <span className="w-6 h-6 rounded-full bg-violet-100 dark:bg-violet-900/40 flex items-center justify-center text-xs font-bold flex-shrink-0 text-violet-600 dark:text-violet-400">3</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold text-violet-700 dark:text-violet-400">AI 채팅 상담</p>
+                  <p className="text-xs text-gray-400 mt-0.5">신청 전략 물어보기</p>
+                </div>
+              </Link>
+              <Link
+                href={`/prompts?programId=${id}`}
+                className="flex-1 flex items-center gap-2.5 p-3 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-xl transition-colors"
+              >
+                <span className="w-6 h-6 rounded-full bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center text-xs font-bold flex-shrink-0 text-indigo-600 dark:text-indigo-400">✨</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold text-indigo-700 dark:text-indigo-400">AI 프롬프트</p>
+                  <p className="text-xs text-gray-400 mt-0.5">다른 AI에 복붙</p>
+                </div>
+              </Link>
             </div>
           </div>
         </div>
@@ -657,7 +748,7 @@ export default function ProgramDetailPage() {
         <AddAppModal
           program={program}
           onClose={() => setShowAddModal(false)}
-          onAdded={() => { setShowAddModal(false); setAddedToTracker(true); }}
+          onAdded={() => { setAddedToTracker(true); }}
         />
       )}
     </>
