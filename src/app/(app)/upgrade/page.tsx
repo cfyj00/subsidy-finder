@@ -4,13 +4,12 @@ import Link from 'next/link';
 import { Check, X, Sparkles, Lock } from 'lucide-react';
 
 const COMPARISON = [
-  { feature: '지원사업 검색·필터', free: true,          paid: true },
-  { feature: 'AI 매칭 결과',       free: 'TOP 3',      paid: '전체 (TOP 5+)' },
-  { feature: 'AI 프롬프트 생성',   free: '종합 상담 1종', paid: '5종 전체' },
-  { feature: '서류 체크리스트',    free: true,          paid: true },
-  { feature: '지원 관리 트래커',   free: true,          paid: true },
-  { feature: 'AI 채팅 (직접 대화)', free: false,        paid: '무제한' },
-  { feature: '마감 알림 이메일',   free: false,         paid: 'D-7 · D-3 · D-1' },
+  { feature: '지원사업 검색·필터',   free: true,            paid: true },
+  { feature: 'AI 프롬프트 생성',     free: '종합 상담 1종',  paid: '5종 전체' },
+  { feature: '서류 체크리스트',      free: true,            paid: true },
+  { feature: '지원 관리 트래커',     free: true,            paid: true },
+  { feature: 'AI 채팅 (직접 대화)',  free: false,           paid: '무제한' },
+  { feature: '마감 알림 이메일',     free: false,           paid: '준비 중' },
 ];
 
 function Cell({ value }: { value: boolean | string }) {
