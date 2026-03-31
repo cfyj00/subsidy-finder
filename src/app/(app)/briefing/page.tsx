@@ -445,6 +445,21 @@ export default function BriefingPage() {
         </Link>
       </div>
 
+      {/* ── 군·구 지역사업 안내 ────────────────────────────────────────────── */}
+      <div className="mt-4 flex items-start gap-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 rounded-2xl p-4">
+        <span className="text-xl shrink-0">🏘️</span>
+        <div>
+          <p className="text-xs font-semibold text-amber-800 dark:text-amber-300 mb-1">
+            군·구 단위 소규모 지역사업은 지실장에 없을 수 있어요
+          </p>
+          <p className="text-xs text-amber-700 dark:text-amber-400 leading-relaxed">
+            증평군, 진천군처럼 시군구 단위 지원사업은 각 기관 홈페이지에서 직접 확인해 주세요.
+            <br />
+            <span className="font-medium">시군구청 홈페이지 → 고시·공고 란</span>에서 찾으실 수 있어요.
+          </p>
+        </div>
+      </div>
+
     </div>
   );
 }
