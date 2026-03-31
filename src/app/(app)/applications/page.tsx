@@ -7,7 +7,7 @@ import {
   Calendar, Building2, X, Check, CheckCircle2, XCircle, Circle,
   ClipboardList, ClipboardCheck, Banknote, StickyNote, Trophy,
   FolderOpen, Send, Clock, PartyPopper, Map,
-  MessageSquare, Loader2, LayoutList, ExternalLink,
+  MessageSquare, Loader2, LayoutList, ExternalLink, FileCheck2,
 } from 'lucide-react';
 import { getSupabaseBrowser } from '@/lib/supabase-browser';
 import type { UserApplication, ApplicationStatus } from '@/types/database';
@@ -196,6 +196,136 @@ function useChecklist(appId: string, stage: ApplicationStatus) {
   return { checks, toggle, doneCount, total, allDone: doneCount === total };
 }
 
+// ── 커스텀 서류 체크리스트 훅 ──────────────────────────────────────────────
+
+interface CustomDoc { id: string; text: string; checked: boolean; }
+
+function useCustomDocs(appId: string) {
+  const key = `custom-docs-${appId}`;
+  const [docs, setDocs] = useState<CustomDoc[]>([]);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(key);
+      if (saved) setDocs(JSON.parse(saved));
+    } catch { /* ignore */ }
+  }, [key]);
+
+  const save = (next: CustomDoc[]) => {
+    setDocs(next);
+    try { localStorage.setItem(key, JSON.stringify(next)); } catch { /* ignore */ }
+  };
+
+  const add = (text: string) => {
+    if (!text.trim()) return;
+    save([...docs, { id: Date.now().toString(), text: text.trim(), checked: false }]);
+  };
+  const toggle = (id: string) => save(docs.map(d => d.id === id ? { ...d, checked: !d.checked } : d));
+  const remove = (id: string) => save(docs.filter(d => d.id !== id));
+
+  return { docs, add, toggle, remove };
+}
+
+// ── 커스텀 서류 섹션 컴포넌트 ──────────────────────────────────────────────
+
+function CustomDocSection({ appId }: { appId: string }) {
+  const { docs, add, toggle, remove } = useCustomDocs(appId);
+  const [input, setInput] = useState('');
+  const [expanded, setExpanded] = useState(false);
+
+  const handleAdd = () => {
+    if (!input.trim()) return;
+    add(input);
+    setInput('');
+  };
+
+  const doneCount = docs.filter(d => d.checked).length;
+
+  return (
+    <div className="border border-indigo-100 dark:border-indigo-900/50 rounded-xl overflow-hidden">
+      {/* 헤더 토글 */}
+      <button
+        type="button"
+        onClick={() => setExpanded(v => !v)}
+        className="w-full flex items-center gap-2.5 px-3 py-2.5 bg-indigo-50 dark:bg-indigo-900/20 hover:bg-indigo-100 dark:hover:bg-indigo-900/30 transition-colors"
+      >
+        <FileCheck2 size={14} className="text-indigo-500 shrink-0" />
+        <span className="flex-1 text-xs font-semibold text-indigo-700 dark:text-indigo-300 text-left">
+          내 필수서류 체크리스트
+        </span>
+        {docs.length > 0 && (
+          <span className="text-xs text-indigo-500 dark:text-indigo-400 font-medium">
+            {doneCount}/{docs.length}
+          </span>
+        )}
+        <ChevronRight
+          size={13}
+          className={`text-indigo-400 shrink-0 transition-transform ${expanded ? 'rotate-90' : ''}`}
+        />
+      </button>
+
+      {/* 펼쳐진 내용 */}
+      {expanded && (
+        <div className="px-3 py-3 space-y-2 bg-white dark:bg-slate-800/50">
+          {/* 항목 목록 */}
+          {docs.length === 0 && (
+            <p className="text-xs text-gray-400 dark:text-gray-500 text-center py-1">
+              아래에 서류명을 입력해 추가해 보세요
+            </p>
+          )}
+          {docs.map(doc => (
+            <div key={doc.id} className="flex items-center gap-2 group">
+              <button
+                type="button"
+                onClick={() => toggle(doc.id)}
+                className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-all ${
+                  doc.checked
+                    ? 'bg-indigo-500 border-indigo-500 text-white'
+                    : 'border-gray-300 dark:border-slate-600 hover:border-indigo-400'
+                }`}
+              >
+                {doc.checked && <Check size={9} />}
+              </button>
+              <span className={`flex-1 text-xs leading-relaxed ${
+                doc.checked ? 'line-through text-gray-300 dark:text-gray-600' : 'text-gray-700 dark:text-gray-300'
+              }`}>
+                {doc.text}
+              </span>
+              <button
+                type="button"
+                onClick={() => remove(doc.id)}
+                className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-red-50 dark:hover:bg-red-900/20"
+              >
+                <X size={11} className="text-red-400" />
+              </button>
+            </div>
+          ))}
+
+          {/* 입력창 */}
+          <div className="flex items-center gap-1.5 pt-1">
+            <input
+              type="text"
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleAdd()}
+              placeholder="서류명 입력 후 Enter"
+              className="flex-1 text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-gray-800 dark:text-gray-200 placeholder-gray-300 dark:placeholder-gray-600 focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-300"
+            />
+            <button
+              type="button"
+              onClick={handleAdd}
+              disabled={!input.trim()}
+              className="p-1.5 rounded-lg bg-indigo-500 hover:bg-indigo-600 disabled:bg-gray-100 dark:disabled:bg-slate-700 disabled:cursor-not-allowed transition-colors"
+            >
+              <Plus size={13} className="text-white disabled:text-gray-400" />
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── StageGuide 컴포넌트 ────────────────────────────────────────────────────
 
 function StageGuide({ app, onAdvance, onResult }: {
@@ -270,6 +400,11 @@ function StageGuide({ app, onAdvance, onResult }: {
           )
         )}
       </div>
+
+      {/* 커스텀 서류 체크리스트 (준비중 단계에서만) */}
+      {app.status === 'preparing' && (
+        <CustomDocSection appId={app.id} />
+      )}
 
       {/* 서류가이드 참조 배너 (준비중 단계에서만) */}
       {app.status === 'preparing' && (
