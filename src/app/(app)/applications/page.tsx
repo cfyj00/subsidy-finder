@@ -122,18 +122,18 @@ function nextAction(status: ApplicationStatus): string {
 
 const STAGE_GUIDE: Record<ApplicationStatus, {
   title: string;
-  items: string[];
+  items: { label: string; href?: string }[];
   advanceLabel?: string;
   advanceTo?: ApplicationStatus;
 }> = {
   preparing: {
     title: '지실장 체크리스트',
     items: [
-      '📌 공식사이트에서 신청요건 직접 확인 (업종·업력·매출)',
-      '💬 AI 채팅으로 신청 전략 상담받기',
-      '📄 필수 서류 준비 (사업자등록증, 재무제표 등)',
-      '📝 사업계획서 작성',
-      '✅ 온라인 신청서 작성 및 제출',
+      { label: '📌 공식사이트에서 신청요건 직접 확인 (업종·업력·매출)' },
+      { label: '💬 AI 채팅으로 신청 전략 상담받기',  href: '/consultant' },
+      { label: '📄 필수 서류 준비 (사업자등록증, 재무제표 등)', href: '/documents' },
+      { label: '📝 AI 프롬프트로 사업계획서 작성',   href: '/prompts' },
+      { label: '✅ 온라인 신청서 작성 및 제출' },
     ],
     advanceLabel: '신청 완료로 기록',
     advanceTo: 'submitted',
@@ -141,24 +141,34 @@ const STAGE_GUIDE: Record<ApplicationStatus, {
   submitted: {
     title: '제출 후 확인 목록',
     items: [
-      '신청 접수번호 확인 (이메일·문자)',
-      '추가 서류 요청 여부 확인',
-      '결과 발표 예정일 확인',
+      { label: '신청 접수번호 확인 (이메일·문자)' },
+      { label: '추가 서류 요청 여부 확인' },
+      { label: '결과 발표 예정일 확인' },
     ],
     advanceLabel: '심사중으로 이동',
     advanceTo: 'reviewing',
   },
   reviewing: {
     title: '심사 진행 중',
-    items: ['담당 기관에서 서류 검토 중이에요', '결과 발표 후 아래 버튼으로 기록하세요'],
+    items: [
+      { label: '담당 기관에서 서류 검토 중이에요' },
+      { label: '결과 발표 후 아래 버튼으로 기록하세요' },
+    ],
   },
   approved: {
     title: '선정 후 할 일',
-    items: ['협약 체결 완료', '사업비 집행 계획 수립', '사후 관리 일정 확인'],
+    items: [
+      { label: '협약 체결 완료' },
+      { label: '사업비 집행 계획 수립' },
+      { label: '사후 관리 일정 확인' },
+    ],
   },
   rejected: {
     title: '다음 도전을 위해',
-    items: ['탈락 사유 확인 및 분석', '유사 지원사업 재탐색'],
+    items: [
+      { label: '탈락 사유 확인 및 분석' },
+      { label: '유사 지원사업 재탐색', href: '/programs' },
+    ],
   },
 };
 
@@ -167,6 +177,7 @@ const STAGE_GUIDE: Record<ApplicationStatus, {
 function useChecklist(appId: string, stage: ApplicationStatus) {
   const guide = STAGE_GUIDE[stage];
   const total = guide.items.length;
+
   const key   = `checklist-${appId}-${stage}`;
 
   const [checks, setChecks] = useState<boolean[]>(() => Array(total).fill(false));
@@ -369,33 +380,52 @@ function StageGuide({ app, onAdvance, onResult }: {
       <div className="space-y-2">
         {guide.items.map((item, i) =>
           isCheckable ? (
-            <button
-              key={i}
-              type="button"
-              onClick={() => toggle(i)}
-              className="flex items-start gap-2.5 text-xs text-left w-full group"
-            >
-              <div className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 mt-px transition-all ${
-                checks[i]
-                  ? 'bg-indigo-500 border-indigo-500 text-white'
-                  : 'border-gray-300 dark:border-slate-600 group-hover:border-indigo-400'
-              }`}>
+            <div key={i} className="flex items-start gap-2.5 text-xs w-full group">
+              <button
+                type="button"
+                onClick={() => toggle(i)}
+                className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 mt-px transition-all ${
+                  checks[i]
+                    ? 'bg-indigo-500 border-indigo-500 text-white'
+                    : 'border-gray-300 dark:border-slate-600 hover:border-indigo-400'
+                }`}
+              >
                 {checks[i] && <Check size={9} />}
-              </div>
-              <span className={`leading-relaxed ${
-                checks[i]
-                  ? 'line-through text-gray-300 dark:text-gray-600'
-                  : 'text-gray-600 dark:text-gray-300'
-              }`}>
-                {item}
+              </button>
+              <span
+                onClick={() => toggle(i)}
+                className={`flex-1 leading-relaxed cursor-pointer ${
+                  checks[i]
+                    ? 'line-through text-gray-300 dark:text-gray-600'
+                    : 'text-gray-600 dark:text-gray-300'
+                }`}
+              >
+                {item.label}
               </span>
-            </button>
+              {item.href && !checks[i] && (
+                <Link
+                  href={item.href}
+                  className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors"
+                  onClick={e => e.stopPropagation()}
+                >
+                  바로가기 →
+                </Link>
+              )}
+            </div>
           ) : (
             <div key={i} className="flex items-start gap-2 text-xs text-gray-500 dark:text-gray-400">
               <span className="shrink-0 mt-px">
                 {app.status === 'reviewing' ? '⏳' : app.status === 'approved' ? '✅' : '•'}
               </span>
-              <span>{item}</span>
+              <span className="flex-1">{item.label}</span>
+              {item.href && (
+                <Link
+                  href={item.href}
+                  className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 dark:bg-slate-700 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-slate-600 transition-colors"
+                >
+                  바로가기 →
+                </Link>
+              )}
             </div>
           )
         )}
