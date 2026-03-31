@@ -104,13 +104,22 @@ function deadlineEmoji(days: number): string {
   return '📅';
 }
 
+export async function GET(req: Request) {
+  // Vercel 크론은 GET으로 호출됨
+  return handler(req);
+}
+
 export async function POST(req: Request) {
-  // ── 크론 시크릿 검증 ───────────────────────────────────────────────────
-  const secret   = req.headers.get('x-cron-secret') ?? req.headers.get('authorization');
+  // 수동 트리거용
+  const secret   = req.headers.get('x-cron-secret') ?? req.headers.get('authorization')?.replace('Bearer ', '');
   const expected = process.env.CRON_SECRET;
-  if (!expected || secret !== expected) {
+  if (expected && secret !== expected) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
+  return handler(req);
+}
+
+async function handler(_req: Request) {
 
   const admin = createSupabaseAdmin();
   let created = 0;
