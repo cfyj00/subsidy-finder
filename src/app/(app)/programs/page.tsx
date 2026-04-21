@@ -264,7 +264,11 @@ export default function ProgramsPage() {
     return (getMatchScore(b.id) ?? 0) - (getMatchScore(a.id) ?? 0);
   });
 
-  const statusLabel = (s: string) => {
+  const statusLabel = (s: string, applicationEnd?: string | null) => {
+    // application_end가 오늘보다 이전이면 DB 상태와 무관하게 마감 처리
+    if (applicationEnd && new Date(applicationEnd) < new Date(new Date().toDateString())) {
+      return <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400">마감</span>;
+    }
     switch (s) {
       case 'open':     return <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">모집중</span>;
       case 'upcoming': return <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400">예정</span>;
@@ -600,7 +604,7 @@ export default function ProgramsPage() {
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${CATEGORY_COLORS[program.category] || CATEGORY_COLORS['기타']}`}>
                         {program.category}
                       </span>
-                      {statusLabel(program.status)}
+                      {statusLabel(program.status, program.application_end)}
                       {program.is_featured && (
                         <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400">⭐ 추천</span>
                       )}

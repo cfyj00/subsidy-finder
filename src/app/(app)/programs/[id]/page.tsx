@@ -240,7 +240,10 @@ export default function ProgramDetailPage() {
     setBookmarkLoading(false);
   };
 
-  const statusBadge = (s: string) => {
+  const statusBadge = (s: string, applicationEnd?: string | null) => {
+    // application_end가 오늘보다 이전이면 무조건 마감
+    const isExpired = applicationEnd && new Date(applicationEnd) < new Date(new Date().toDateString());
+    const resolved = isExpired ? 'closed' : s;
     const map: Record<string, { label: string; cls: string }> = {
       open:     { label: '모집중',      cls: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' },
       upcoming: { label: '예정',        cls: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' },
@@ -248,7 +251,7 @@ export default function ProgramDetailPage() {
       always:   { label: '상시접수',    cls: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400' },
       expected: { label: '출시예상',    cls: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400' },
     };
-    const info = map[s] ?? map.always;
+    const info = map[resolved] ?? map.always;
     return <span className={`px-3 py-1 rounded-full text-sm font-medium ${info.cls}`}>{info.label}</span>;
   };
 
@@ -296,7 +299,7 @@ export default function ProgramDetailPage() {
                 <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${CATEGORY_COLORS[program.category] ?? CATEGORY_COLORS['기타']}`}>
                   {program.category}
                 </span>
-                {statusBadge(program.status)}
+                {statusBadge(program.status, program.application_end)}
                 {program.is_featured && (
                   <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400">⭐ 추천</span>
                 )}
