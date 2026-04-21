@@ -10,7 +10,7 @@ import { Sidebar } from './Sidebar';
 const BOTTOM_TABS = [
   { href: '/briefing',     icon: Home,           label: '브리핑' },
   { href: '/programs',     icon: Search,          label: '지원사업' },
-  { href: '/consultant',   icon: MessageSquare,   label: 'AI상담' },
+  { href: '/consultant',   icon: MessageSquare,   label: 'AI 상담' },
   { href: '/applications', icon: ClipboardList,   label: '지원관리' },
   { href: '/prompts',      icon: Sparkles,        label: '프롬프트' },
 ] as const;
