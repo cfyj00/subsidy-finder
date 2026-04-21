@@ -48,7 +48,7 @@ export default function ProgramsPage() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
-  const [filterStatus, setFilterStatus] = useState('');
+  const [filterStatus, setFilterStatus] = useState('open');
   const [filterRegion, setFilterRegion] = useState('all');
   const [showFilters, setShowFilters] = useState(false);
   const [filterBookmarked, setFilterBookmarked] = useState(false);
@@ -71,7 +71,14 @@ export default function ProgramsPage() {
 
     let query = supabase.from('programs').select('id, external_id, source, title, managing_org, category, subcategory, support_type, target_regions, target_industries, target_company_size, min_employee_count, max_employee_count, min_company_age, max_company_age, min_revenue, max_revenue, funding_amount_min, funding_amount_max, application_start, application_end, status, description, eligibility_summary, detail_url, is_featured, is_recurring, typical_open_month, created_at').order('is_featured', { ascending: false }).order('created_at', { ascending: false });
     if (filterCategory) query = query.eq('category', filterCategory);
-    if (filterStatus)   query = query.eq('status', filterStatus);
+    if (filterStatus === 'open') {
+      query = query.in('status', ['open', 'upcoming']);
+    } else if (filterStatus) {
+      query = query.eq('status', filterStatus);
+    } else {
+      // 기본: 마감 제외
+      query = query.not('status', 'eq', 'closed');
+    }
     const { data: progs } = await query;
     setPrograms((progs || []) as Program[]);
 
@@ -431,8 +438,8 @@ export default function ProgramsPage() {
               <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">모집 상태</label>
               <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                <option value="">전체</option>
-                <option value="open">모집중</option>
+                <option value="">마감 제외 전체</option>
+                <option value="open">모집중·예정</option>
                 <option value="upcoming">예정</option>
                 <option value="expected">출시예상 (작년기준)</option>
                 <option value="always">상시</option>
