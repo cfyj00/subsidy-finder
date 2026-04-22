@@ -186,6 +186,9 @@ export default function ProgramsPage() {
   const bookmarkCount = Object.values(matches).filter(m => m.is_bookmarked).length;
 
   // ── 필터 + 정렬 ────────────────────────────────────────────────────────────
+  const todayMidnight = new Date(); todayMidnight.setHours(0, 0, 0, 0);
+  const currentYear = todayMidnight.getFullYear();
+
   let filteredPrograms = programs.filter(p => {
     if (searchQuery && !matchesSearch(p, searchQuery)) return false;
     if (filterRegion !== 'all') {
@@ -193,6 +196,17 @@ export default function ProgramsPage() {
       if (tr.length > 0 && !tr.includes('전국') && !tr.some(r => r.includes(filterRegion))) return false;
     }
     if (filterBookmarked && !matches[p.id]?.is_bookmarked) return false;
+
+    // 모집중·예정 필터: 마감된 사업 제외
+    if (filterStatus === 'open') {
+      // application_end 있고 이미 지났으면 제외
+      if (p.application_end && new Date(p.application_end) < todayMidnight) return false;
+      // application_end 없는데 제목에 지난 연도 포함 시 제외 (예: 2025년도, 2024년도)
+      if (!p.application_end) {
+        const m = p.title.match(/(\d{4})년도?/);
+        if (m && parseInt(m[1]) < currentYear) return false;
+      }
+    }
 
     // 내사업검색: 마감 제외 + 내 지역 필터 + 매칭 점수 40점 이상
     if (filterMyBusiness && businessProfile) {
